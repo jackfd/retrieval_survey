@@ -86,3 +86,11 @@ output/
 ```
 
 The output path and filenames are fixed contract interfaces and must not be changed without contract revision approval.
+
+## Test Command
+
+Use this command to run unit tests after the directory restructure:
+
+```bash
+python -m unittest discover -s embed_pipe/tests -t . -v
+```

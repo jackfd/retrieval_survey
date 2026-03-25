@@ -64,22 +64,17 @@ class TestProcessors(unittest.TestCase):
         )
         self.assertFalse(result.ok)
 
-    def test_process_docs_chunk_selection_failure_stage(self):
+    def test_process_docs_raises_when_selector_raises(self):
         docs_path = self._write_jsonl(['{"doc_id": "d1", "doc_text": "text"}'])
         selector = Mock()
         selector.select_chunks.side_effect = RuntimeError("No chunk selected")
 
-        result = DocumentService(selector=selector, runtime=self.runtime).process(
-            docs_path=docs_path,
-            retry_mode=False,
-            retry_id_set=set(),
-        )
-
-        self.assertTrue(result.ok)
-        self.assertEqual(result.value.attempted_count, 1)
-        self.assertEqual(len(result.value.failures), 1)
-        self.assertEqual(result.value.failures[0]["record_type"], "doc")
-        self.assertEqual(result.value.failures[0]["stage"], "chunk_selection")
+        with self.assertRaises(RuntimeError):
+            DocumentService(selector=selector, runtime=self.runtime).process(
+                docs_path=docs_path,
+                retry_mode=False,
+                retry_id_set=set(),
+            )
 
     def test_process_queries_records_embedding_failure(self):
         queries_path = self._write_jsonl(

@@ -106,7 +106,7 @@ class TestPipeline(unittest.TestCase):
             self.assertEqual(stats["query_failure_count"], 1)
             self.assertEqual(stats["failure_count"], 2)
 
-    def test_run_builder_returns_failed_result_when_write_all_outputs_raises(self):
+    def test_run_builder_raises_when_write_all_outputs_raises(self):
         runtime = RuntimeConfig(
             embedding_dim=3,
             normalize_embeddings=False,
@@ -175,8 +175,8 @@ class TestPipeline(unittest.TestCase):
                                 builder_cfg=builder_cfg,
                                 embedding_strategy=Mock(),
                             )
-                            result = runner.run()
-                            self.assertFalse(result.ok)
+                            with self.assertRaises(RuntimeError):
+                                runner.run()
 
 
 if __name__ == "__main__":

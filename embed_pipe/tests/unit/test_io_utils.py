@@ -23,7 +23,7 @@ class TestOutputWriter(unittest.TestCase):
             )
 
             doc_ids = OutputWriter(output_dir=output_dir).load_failed_doc_ids()
-            self.assertEqual(doc_ids, ["d1", "legacy_doc"])
+            self.assertEqual(doc_ids, {"d1", "legacy_doc"})
 
 
 if __name__ == "__main__":
