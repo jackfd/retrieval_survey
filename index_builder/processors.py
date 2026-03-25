@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
-import sys
 from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
 
 from index_builder.config import RuntimeConfig
+from chunk_selector.chunk_selector import ChunkSelector
+from chunk_selector.selector_config import SelectorConfig
 from index_builder.embedding import EmbeddingStrategy, ensure_embedding_shape
 from index_builder.errors import ChunkSelectionError, EmbeddingGenerationError
 from index_builder.io_utils import read_jsonl, utc_now_iso
@@ -39,11 +40,6 @@ def _build_failure_record(
 
 
 def build_chunk_selector(runtime: RuntimeConfig, embedding_strategy: EmbeddingStrategy):
-    chunk_selector_dir = Path(__file__).resolve().parent.parent / "chunk_selector"
-    if str(chunk_selector_dir) not in sys.path:
-        sys.path.insert(0, str(chunk_selector_dir))
-    from chunk_selector import ChunkSelector, SelectorConfig
-
     return ChunkSelector(
         embedding_api_url=runtime.embedding_api_url or "http://unused.local",
         chunk_num=1,
@@ -137,13 +133,6 @@ def process_docs(
         except Exception as exc:
             error_type = type(exc).__name__
             stage = "chunk_selection" if isinstance(exc, ChunkSelectionError) else "embedding"
-            logger.error(
-                "doc_failed doc_id=%s error_type=%s error=%s",
-                doc_id,
-                error_type,
-                exc,
-                exc_info=True,
-            )
             failures.append(
                 _build_failure_record(
                     record_type="doc",
@@ -227,13 +216,6 @@ def process_queries(
             )
         except Exception as exc:
             error_type = type(exc).__name__
-            logger.error(
-                "query_failed query_id=%s error_type=%s error=%s",
-                qid,
-                error_type,
-                exc,
-                exc_info=True,
-            )
             failures.append(
                 _build_failure_record(
                     record_type="query",

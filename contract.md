@@ -150,7 +150,7 @@ Output directory MUST be:
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `doc_id` | string | Yes | Failed doc identifier |
-| `error_type` | string | Yes | Exception class or taxonomy key |
+| `error_type` | string | Yes | Exception class name |
 | `error_message` | string | Yes | Non-empty |
 | `timestamp_utc` | string | Yes | ISO-8601 UTC timestamp |
 
@@ -212,21 +212,17 @@ Minimum required fields:
    - message text
    - related `doc_id` when available
 3. Logs SHALL include run start/end summary with counts.
+4. Business exceptions MUST be logged at the source layer before re-raising or propagating. Each such log MUST include:
+   - function name
+   - source line number
+   - reason text
+   - key context identifier(s) when available (for example: `doc_id`, `query_id`, `batch_index`, `path`, `model_name`)
+5. Silent exception swallowing is prohibited.
+6. If code intentionally degrades to an empty result (for example `[]` or empty vectors), it MUST emit a complete log entry at that downgrade point, including function name, line number, reason, and context.
+7. Orchestration layer (`pipeline` / `processors`) SHOULD avoid duplicate error logs when source-layer detailed logs already exist.
+8. Function and line metadata SHOULD be emitted via logger formatter configuration (for example `%(filename)s:%(lineno)d`), not via custom logging wrapper functions.
 
-## 6. Error Taxonomy (Canonical)
-
-Implementation MUST map runtime failures to one of:
-
-- `InputValidationError`
-- `ModelLoadError`
-- `EmbeddingGenerationError`
-- `ChunkSelectionError`
-- `SerializationError`
-- `UnexpectedRuntimeError`
-
-`error_type` in `failures.jsonl` MUST be either one canonical taxonomy value or a concrete exception class that can be mapped to one.
-
-## 7. Contract Change Protocol
+## 6. Contract Change Protocol
 
 Contract-breaking changes MUST follow this process:
 
@@ -237,11 +233,11 @@ Contract-breaking changes MUST follow this process:
 
 Without approval, contract-breaking code changes are prohibited.
 
-## 8. Acceptance Criteria Linkage
+## 7. Acceptance Criteria Linkage
 
 No implementation task is complete unless all are true:
 
 1. CLI behavior matches Section 2.
 2. Output files match Section 3 schema.
 3. Runtime behavior matches Section 4.
-4. Logging and error taxonomy match Sections 5 and 6.
+4. Logging behavior matches Section 5.

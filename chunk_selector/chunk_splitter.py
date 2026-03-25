@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 import re
 from typing import Callable, List
 
@@ -27,6 +28,11 @@ class ChunkSplitter:
         将文本分割成段落。
         """
         if not isinstance(text, str) or not text.strip():
+            logging.getLogger("index_builder").error(
+                "event=splitter_degrade reason=%s context=%s",
+                "Invalid input text for split_paragraphs",
+                "text_type=%s" % type(text).__name__,
+            )
             return []
 
         raw_paragraphs = re.split(r"\n{2,}", text)

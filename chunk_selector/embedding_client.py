@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 import requests
 
-from selector_config import SelectorConfig
+from .selector_config import SelectorConfig
 
 
 class EmbeddingClient:
@@ -13,6 +13,7 @@ class EmbeddingClient:
         self.config = config
 
     def get_embeddings(self, chunks: List[str]) -> np.ndarray:
+        logger = logging.getLogger("index_builder")
         vectors = []
         for i in range(0, len(chunks), self.config.batch_size):
             batch = chunks[i : i + self.config.batch_size]
@@ -45,18 +46,29 @@ class EmbeddingClient:
                     break
                 except (requests.exceptions.RequestException, ValueError) as exc:
                     last_error = exc
-                    logging.warning(
-                        "Embedding batch=%s retry=%s failed: %s",
-                        batch_index,
-                        retry,
+                    logger.error(
+                        "event=embedding_http_retry_failed reason=%s context=%s",
                         exc,
+                        "batch_index=%s retry=%s batch_size=%s url=%s"
+                        % (batch_index, retry, len(batch), self.embedding_api_url),
                     )
 
             if last_error is not None:
+                logger.error(
+                    "event=embedding_http_failed reason=%s context=%s",
+                    "Failed to get embeddings for batch",
+                    "batch_index=%s batch_size=%s url=%s last_error=%s"
+                    % (batch_index, len(batch), self.embedding_api_url, last_error),
+                )
                 raise requests.exceptions.RequestException(
                     f"Failed to get embeddings for batch {batch_index}: {last_error}"
                 )
 
         if not vectors:
+            logger.error(
+                "event=embedding_http_degrade reason=%s context=%s",
+                "Embedding provider returned empty vectors",
+                "input_chunk_count=%s url=%s" % (len(chunks), self.embedding_api_url),
+            )
             return np.empty((0, 0), dtype=float)
         return np.vstack(vectors)

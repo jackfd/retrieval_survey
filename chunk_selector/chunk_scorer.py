@@ -14,7 +14,7 @@ except ImportError:
     StandardScaler = None
     SKLEARN_AVAILABLE = False
 
-from selector_config import SelectorConfig
+from .selector_config import SelectorConfig
 
 
 class ChunkScorer:

@@ -29,7 +29,7 @@ def setup_logger(log_file: Path) -> logging.Logger:
     logger = logging.getLogger("index_builder")
     logger.setLevel(logging.INFO)
     logger.handlers = []
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(filename)s:%(lineno)d %(message)s")
 
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setFormatter(formatter)

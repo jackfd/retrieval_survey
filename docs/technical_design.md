@@ -143,22 +143,21 @@ Input files are loaded from:
 
 ## 6. Failure Modes and Observability
 
-## 6.1 Canonical Error Taxonomy
+## 6.1 Exception Logging Responsibilities
 
-- `InputValidationError`
-- `ModelLoadError`
-- `EmbeddingGenerationError`
-- `ChunkSelectionError`
-- `SerializationError`
-- `UnexpectedRuntimeError`
+1. Business exceptions are logged at source layer before propagation.
+2. Log entries include function name, line number, reason text, and key context identifiers.
+3. Silent exception swallowing is prohibited.
+4. If logic degrades to empty output, the downgrade point logs a complete failure reason.
 
 ## 6.2 Logging Plan
 
 `app.log` MUST include:
 
 1. Run start context: dataset/model/config summary
-2. Per-failure entry with exception class and message
+2. Per-failure entry with function, line, reason, and key context
 3. End summary: doc_count/query_count/failure_count and duration
+4. Source location fields are emitted by logger formatter configuration (for example `filename:lineno`), not by custom wrapper helpers.
 
 ## 6.3 Embedding Strategy Rules
 
@@ -189,7 +188,7 @@ Exit criteria:
 
 1. CLI signatures are fully specified.
 2. Data schemas and output paths are fully specified.
-3. Behavioral constraints and error taxonomy are explicit and testable.
+3. Behavioral constraints and logging responsibilities are explicit and testable.
 
 Artifacts:
 

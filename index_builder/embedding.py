@@ -1,3 +1,4 @@
+import logging
 from typing import List, Protocol
 
 import numpy as np
@@ -13,9 +14,21 @@ class EmbeddingStrategy(Protocol):
 
 
 def ensure_embedding_shape(vectors: np.ndarray, expected_dim: int) -> np.ndarray:
+    logger = logging.getLogger("index_builder")
     if vectors.ndim != 2:
+        logger.error(
+            "event=embedding_shape_invalid reason=%s context=%s",
+            "Expected 2D embeddings",
+            "expected_dim=%s actual_shape=%s" % (expected_dim, vectors.shape),
+        )
         raise EmbeddingGenerationError(f"Expected 2D embeddings, got shape={vectors.shape}")
     if vectors.shape[1] != expected_dim:
+        logger.error(
+            "event=embedding_shape_invalid reason=%s context=%s",
+            "Embedding dimension mismatch",
+            "expected_dim=%s actual_dim=%s actual_shape=%s"
+            % (expected_dim, vectors.shape[1], vectors.shape),
+        )
         raise EmbeddingGenerationError(
             f"Embedding dimension mismatch, expected={expected_dim}, got={vectors.shape[1]}"
         )
@@ -47,10 +60,16 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         self._encoder = self._build_local_encoder(model=model)
 
     def _build_local_encoder(self, model: ModelConfig):
+        logger = logging.getLogger("index_builder")
         if model.provider == "sentence_transformers":
             try:
                 from sentence_transformers import SentenceTransformer
             except ImportError as exc:
+                logger.error(
+                    "event=model_load_failed reason=%s context=%s",
+                    exc,
+                    "provider=%s model_id=%s" % (model.provider, model.model_id),
+                )
                 raise ModelLoadError(
                     "sentence-transformers is required for provider=sentence_transformers"
                 ) from exc
@@ -63,12 +82,22 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             try:
                 from FlagEmbedding import BGEM3FlagModel
             except ImportError as exc:
+                logger.error(
+                    "event=model_load_failed reason=%s context=%s",
+                    exc,
+                    "provider=%s model_id=%s" % (model.provider, model.model_id),
+                )
                 raise ModelLoadError("FlagEmbedding is required for provider=flag_embedding") from exc
             encoder = BGEM3FlagModel(
                 model.model_id, use_fp16=str(self.runtime.device).startswith("cuda")
             )
             return ("flag_embedding", encoder)
 
+        logger.error(
+            "event=model_load_failed reason=%s context=%s",
+            "Unsupported local provider",
+            "provider=%s model_id=%s" % (model.provider, model.model_id),
+        )
         raise ModelLoadError(f"Unsupported local provider={model.provider!r}")
 
     def encode(self, texts: List[str], is_query: bool) -> np.ndarray:
@@ -116,6 +145,7 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
         self.embedding_api_url = runtime.embedding_api_url
 
     def encode(self, texts: List[str], is_query: bool) -> np.ndarray:
+        logger = logging.getLogger("index_builder")
         prepared = self._prepare_texts(texts, is_query=is_query)
         vectors = []
         for i in range(0, len(prepared), self.runtime.batch_size):
@@ -149,8 +179,20 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     break
                 except (requests.exceptions.RequestException, ValueError) as exc:
                     last_error = exc
+                    logger.error(
+                        "event=embedding_http_retry_failed reason=%s context=%s",
+                        exc,
+                        "batch_index=%s retry=%s batch_size=%s url=%s"
+                        % (batch_index, retry, len(batch), self.embedding_api_url),
+                    )
 
             if last_error is not None:
+                logger.error(
+                    "event=embedding_http_failed reason=%s context=%s",
+                    "HTTP embedding failed",
+                    "batch_index=%s batch_size=%s url=%s last_error=%s"
+                    % (batch_index, len(batch), self.embedding_api_url, last_error),
+                )
                 raise EmbeddingGenerationError(
                     f"HTTP embedding failed for batch {batch_index}: {last_error}"
                 ) from last_error

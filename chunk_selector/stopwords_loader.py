@@ -54,7 +54,11 @@ class StopwordsLoader:
                 with open(config_path, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 if not isinstance(config, dict):
-                    logging.warning("Invalid stopwords config format in %s", config_path)
+                    logging.getLogger("index_builder").error(
+                        "event=stopwords_config_invalid reason=%s context=%s",
+                        "Invalid stopwords config format",
+                        "config_path=%s" % config_path,
+                    )
                     continue
 
                 StopwordsLoader._extend_if_iterable(
@@ -65,7 +69,11 @@ class StopwordsLoader:
                 )
                 return custom_stopwords
             except Exception as exc:
-                logging.warning("Failed to load stopwords from %s: %s", config_path, exc)
+                logging.getLogger("index_builder").error(
+                    "event=stopwords_load_failed reason=%s context=%s",
+                    exc,
+                    "config_path=%s" % config_path,
+                )
 
         return custom_stopwords
 
@@ -96,5 +104,9 @@ class StopwordsLoader:
 
             fallback_stopwords.update({word.lower() for word in ENGLISH_STOP_WORDS})
         except ImportError:
-            logging.warning("sklearn is not installed, fallback stopwords unavailable")
+            logging.getLogger("index_builder").error(
+                "event=stopwords_fallback_unavailable reason=%s context=%s",
+                "sklearn is not installed, fallback stopwords unavailable",
+                "provider=sklearn",
+            )
         return fallback_stopwords

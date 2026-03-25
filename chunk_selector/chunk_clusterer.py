@@ -17,12 +17,22 @@ class ChunkClusterer:
         self.cluster_num = max(1, int(cluster_num))
 
     def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
+        logger = logging.getLogger("index_builder")
         if embeddings.ndim != 2 or embeddings.shape[0] == 0:
-            logging.warning("No valid chunks for clustering, embeddings shape: %s", embeddings.shape)
+            logger.error(
+                "event=cluster_degrade reason=%s context=%s",
+                "No valid chunks for clustering",
+                "embedding_shape=%s" % (embeddings.shape,),
+            )
             return []
 
         cluster_num = min(self.cluster_num, embeddings.shape[0])
         if cluster_num <= 0:
+            logger.error(
+                "event=cluster_degrade reason=%s context=%s",
+                "cluster_num resolved to non-positive",
+                "requested_cluster_num=%s rows=%s" % (self.cluster_num, embeddings.shape[0]),
+            )
             return []
 
         if SKLEARN_AVAILABLE:

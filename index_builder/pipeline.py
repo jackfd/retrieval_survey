@@ -23,6 +23,7 @@ def run_builder(
     dataset_ctx: DatasetContext,
     builder_cfg: BuilderConfig,
     embedding_strategy: EmbeddingStrategy,
+    logger,
 ) -> None:
     """
     运行索引构建器处理文档和查询数据
@@ -42,7 +43,6 @@ def run_builder(
     resolved_mode = "http" if runtime.embedding_api_url.strip() else "local"
     output_dir = output_root / dataset_name / model.model_name
     output_dir.mkdir(parents=True, exist_ok=True)
-    logger = setup_logger(output_dir / "app.log")
 
     # 记录运行开始信息
     run_start = utc_now_iso()
@@ -67,7 +67,9 @@ def run_builder(
     retry_id_set = set(previous_failed_ids)
 
     # 处理文档数据
-    selector = build_chunk_selector(runtime=runtime, embedding_strategy=embedding_strategy)
+    selector = build_chunk_selector(
+        runtime=runtime, embedding_strategy=embedding_strategy
+    )
     doc_result = process_docs(
         docs_path=dataset_ctx.docs_path,
         selector=selector,

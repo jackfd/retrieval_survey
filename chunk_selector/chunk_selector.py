@@ -5,12 +5,12 @@ from typing import Callable, Dict, List
 import numpy as np
 import requests
 
-from chunk_clusterer import ChunkClusterer
-from chunk_scorer import ChunkScorer
-from chunk_splitter import ChunkSplitter
-from embedding_client import EmbeddingClient
-from selector_config import SelectorConfig
-from stopwords_loader import StopwordsLoader
+from .chunk_clusterer import ChunkClusterer
+from .chunk_scorer import ChunkScorer
+from .chunk_splitter import ChunkSplitter
+from .embedding_client import EmbeddingClient
+from .selector_config import SelectorConfig
+from .stopwords_loader import StopwordsLoader
 
 
 class ChunkSelector:
@@ -70,39 +70,70 @@ class ChunkSelector:
         return self.scorer.compute_scores(chunks, candidate_idxs, title=title)
 
     def select_chunks(self, text: str, title: str) -> List[Dict]:
+        logger = logging.getLogger("index_builder")
         chunks = self.text_processor.split_paragraphs(text)
         if not chunks:
-            logging.warning(
-                "No valid paragraphs after text splitting, terminating processing"
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "No valid paragraphs after text splitting",
+                "text_length=%s" % (len(text) if isinstance(text, str) else 0),
             )
             return []
 
         try:
             self.compute_global_statistics(chunks)
         except ValueError as exc:
-            logging.warning("Failed to compute global statistics: %s", exc)
+            logger.error(
+                "event=chunk_statistics_failed reason=%s context=%s",
+                exc,
+                "chunk_count=%s" % len(chunks),
+            )
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "Global statistics computation failed",
+                "chunk_count=%s" % len(chunks),
+            )
             return []
 
         try:
             embeddings = self.get_embeddings(chunks)
         except (requests.exceptions.RequestException, Exception) as exc:
-            logging.error("Failed to retrieve embeddings: %s", exc)
+            logger.error(
+                "event=embedding_retrieval_failed reason=%s context=%s",
+                exc,
+                "chunk_count=%s" % len(chunks),
+            )
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "Embedding retrieval failed",
+                "chunk_count=%s" % len(chunks),
+            )
             return []
 
         if embeddings.size == 0:
-            logging.warning("Embeddings are empty, terminating processing")
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "Embeddings are empty",
+                "chunk_count=%s" % len(chunks),
+            )
             return []
 
         candidate_idxs = self.cluster_chunks(embeddings)
         if not candidate_idxs:
-            logging.warning(
-                "No valid candidate indices after clustering, terminating processing"
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "No valid candidate indices after clustering",
+                "embedding_shape=%s" % (embeddings.shape,),
             )
             return []
 
         scores = self.compute_scores(chunks, candidate_idxs, title=title)
         if len(scores) == 0:
-            logging.warning("Computed scores are empty, terminating processing")
+            logger.error(
+                "event=chunk_select_degrade reason=%s context=%s",
+                "Computed scores are empty",
+                "candidate_count=%s" % len(candidate_idxs),
+            )
             return []
 
         top_indices = np.arange(len(candidate_idxs))
