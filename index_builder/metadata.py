@@ -50,7 +50,6 @@ def build_run_metadata(
             "instruction_template": runtime.instruction_template,
             "batch_size": runtime.batch_size,
             "device": runtime.device,
-            "embedding_mode": runtime.embedding_mode,
             "embedding_api_url": runtime.embedding_api_url,
         },
         "stats": {
@@ -60,4 +59,3 @@ def build_run_metadata(
             "failure_count": int(failures_count),
         },
     }
-

@@ -54,16 +54,15 @@ Scheduling rules:
 
 `model_config.yaml` MUST define global strategy keys:
 
-- `embedding_mode`: `local` or `http` (default `local`)
-- `embedding_api_url`: required only when `embedding_mode=http`
+- `embedding_api_url`: strategy switch source
 
 Behavioral rules:
 
-1. In `local` mode, implementation MUST call local model encoders directly.
-2. In `http` mode, implementation MUST call `embedding_api_url` and use payload contract:
+1. If `embedding_api_url` is empty (or whitespace), implementation MUST use local model encoders directly.
+2. If `embedding_api_url` is non-empty, implementation MUST use HTTP mode and payload contract:
    - request: `{"chunks":[...]}`
    - response: `{"vectors":[...]}`
-3. Strategy and URL MUST be sourced from YAML only.
+3. Strategy resolution and URL source MUST come from YAML only.
 
 ### 2.3 Dataset Root Conventions
 
@@ -198,8 +197,8 @@ Minimum required fields:
 3. **Strict 768 dimensions**: implementation MUST fail the affected item when vector dimension is not 768.
    - Padding or truncation fallback is prohibited.
 4. **Embedding strategy**:
-   - `local` mode MUST use direct local encoding.
-   - `http` mode MUST use `embedding_api_url`.
+   - empty `embedding_api_url` MUST use direct local encoding.
+   - non-empty `embedding_api_url` MUST use HTTP mode.
 5. **Incremental retry**:
    - If `failures.jsonl` exists from a previous run, implementation MUST process only failed docs.
    - Successful retries MUST be merged into existing `docs.parquet` by `doc_id` overwrite semantics.

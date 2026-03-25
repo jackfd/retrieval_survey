@@ -73,8 +73,8 @@ CLI interface (must match contract):
 4. Builder resolves target sub-dataset directory under `datasets/` root.
 5. Builder loads dataset metadata and runtime config.
 6. Builder selects embedding strategy from YAML:
-   - `local`: direct local model encoding
-   - `http`: request `embedding_api_url`
+   - empty `embedding_api_url`: direct local model encoding
+   - non-empty `embedding_api_url`: request HTTP embedding API
 7. Builder runs doc pipeline:
    - read docs JSONL
    - run chunk selection
@@ -163,8 +163,8 @@ Input files are loaded from:
 ## 6.3 Embedding Strategy Rules
 
 1. Strategy source is `model_config.yaml` only.
-2. `embedding_mode=local` is default.
-3. `embedding_mode=http` requires non-empty `embedding_api_url`.
+2. Empty `embedding_api_url` resolves to local mode.
+3. Non-empty `embedding_api_url` resolves to HTTP mode.
 4. HTTP payload contract:
    - request `{"chunks":[...]}`
    - response `{"vectors":[...]}`

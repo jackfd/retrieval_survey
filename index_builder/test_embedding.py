@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from index_builder.config import RuntimeConfig
-from index_builder.embedding import HttpEmbeddingStrategy
+from index_builder.config import ModelConfig, RuntimeConfig
+from index_builder.embedding import HttpEmbeddingStrategy, build_embedding_strategy
 from index_builder.errors import EmbeddingGenerationError
 
 
@@ -19,7 +19,6 @@ class TestHttpEmbeddingStrategy(unittest.TestCase):
             instruction_template="",
             batch_size=2,
             device="cpu",
-            embedding_mode="http",
             embedding_api_url="http://mock-api",
             http_timeout=5.0,
             http_max_retries=1,
@@ -48,6 +47,51 @@ class TestHttpEmbeddingStrategy(unittest.TestCase):
             self.strategy.encode(["a"], is_query=False)
 
 
+class TestStrategyRouting(unittest.TestCase):
+    def test_build_strategy_uses_http_when_url_present(self):
+        runtime = RuntimeConfig(
+            embedding_dim=3,
+            normalize_embeddings=False,
+            max_length=128,
+            query_prefix="",
+            doc_prefix="",
+            instruction_template="",
+            batch_size=2,
+            device="cpu",
+            embedding_api_url="http://x",
+            http_timeout=5.0,
+            http_max_retries=1,
+        )
+        model = ModelConfig(model_name="m", provider="sentence_transformers", model_id="id")
+        with patch("index_builder.embedding.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
+            with patch("index_builder.embedding.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
+                strategy = build_embedding_strategy(runtime, model)
+                self.assertEqual(strategy, "HTTP")
+                http_cls.assert_called_once()
+                local_cls.assert_not_called()
+
+    def test_build_strategy_uses_local_when_url_empty(self):
+        runtime = RuntimeConfig(
+            embedding_dim=3,
+            normalize_embeddings=False,
+            max_length=128,
+            query_prefix="",
+            doc_prefix="",
+            instruction_template="",
+            batch_size=2,
+            device="cpu",
+            embedding_api_url="   ",
+            http_timeout=5.0,
+            http_max_retries=1,
+        )
+        model = ModelConfig(model_name="m", provider="sentence_transformers", model_id="id")
+        with patch("index_builder.embedding.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
+            with patch("index_builder.embedding.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
+                strategy = build_embedding_strategy(runtime, model)
+                self.assertEqual(strategy, "LOCAL")
+                local_cls.assert_called_once()
+                http_cls.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
-

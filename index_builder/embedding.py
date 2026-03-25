@@ -168,9 +168,6 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
 
 
 def build_embedding_strategy(runtime: RuntimeConfig, model: ModelConfig) -> EmbeddingStrategy:
-    if runtime.embedding_mode == "local":
-        return LocalEmbeddingStrategy(runtime=runtime, model=model)
-    if runtime.embedding_mode == "http":
+    if runtime.embedding_api_url.strip():
         return HttpEmbeddingStrategy(runtime=runtime)
-    raise ModelLoadError(f"Unsupported embedding_mode={runtime.embedding_mode!r}")
-
+    return LocalEmbeddingStrategy(runtime=runtime, model=model)

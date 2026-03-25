@@ -17,7 +17,6 @@ class RuntimeConfig:
     instruction_template: str
     batch_size: int
     device: str
-    embedding_mode: str
     embedding_api_url: str
     http_timeout: float
     http_max_retries: int
@@ -59,13 +58,7 @@ def load_builder_config(config_path: Path, model_name: str) -> BuilderConfig:
     if not isinstance(model_obj, dict):
         raise InputValidationError(f"Model config must be a mapping: model_name={model_name!r}")
 
-    mode = str(cfg.get("embedding_mode", "local")).strip().lower()
-    if mode not in {"local", "http"}:
-        raise InputValidationError("embedding_mode must be one of: local, http")
-
     api_url = str(cfg.get("embedding_api_url", "")).strip()
-    if mode == "http" and not api_url:
-        raise InputValidationError("embedding_api_url is required when embedding_mode=http")
 
     runtime = RuntimeConfig(
         embedding_dim=int(cfg.get("embedding_dim", 768)),
@@ -76,7 +69,6 @@ def load_builder_config(config_path: Path, model_name: str) -> BuilderConfig:
         instruction_template=str(cfg.get("instruction_template", "")),
         batch_size=int(cfg.get("batch_size", 64)),
         device=str(cfg.get("device", "cuda")),
-        embedding_mode=mode,
         embedding_api_url=api_url,
         http_timeout=float(cfg.get("http_timeout", 30.0)),
         http_max_retries=int(cfg.get("http_max_retries", 2)),
