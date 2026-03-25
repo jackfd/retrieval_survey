@@ -80,7 +80,7 @@ def run_builder(
     # 合并新处理的文档与已存在的文档，并保存到parquet文件
     existing_docs_df = load_existing_docs_parquet(docs_parquet_path)
     merged_docs_df = merge_docs_with_retry(
-        new_docs_df=doc_result.docs_df,
+        new_docs_df=doc_result.output_df,
         existing_docs_df=existing_docs_df,
         retry_mode=retry_mode,
         retry_id_set=retry_id_set,
@@ -88,15 +88,17 @@ def run_builder(
     merged_docs_df.to_parquet(docs_parquet_path, index=False)
 
     # 处理查询数据并保存
-    query_df = process_queries(
+    query_result = process_queries(
         queries_path=dataset_ctx.queries_path,
         embedding_strategy=embedding_strategy,
         runtime=runtime,
+        logger=logger,
     )
-    query_df.to_parquet(queries_parquet_path, index=False)
+    query_result.output_df.to_parquet(queries_parquet_path, index=False)
 
     # 保存失败记录
-    write_failures(failures_path, doc_result.failures)
+    all_failures = doc_result.failures + query_result.failures
+    write_failures(failures_path, all_failures)
 
     # 构建并保存元数据
     run_end = utc_now_iso()
@@ -107,19 +109,26 @@ def run_builder(
         dataset_ctx=dataset_ctx,
         builder_cfg=builder_cfg,
         merged_docs_df=merged_docs_df,
-        query_df=query_df,
-        attempted_docs=doc_result.attempted_docs,
-        failures_count=len(doc_result.failures),
+        query_df=query_result.output_df,
+        attempted_docs=doc_result.attempted_count,
+        attempted_queries=query_result.attempted_count,
+        doc_failures_count=len(doc_result.failures),
+        query_failures_count=len(query_result.failures),
+        skipped_missing_required_docs=doc_result.skipped_missing_required_count,
+        skipped_missing_required_queries=query_result.skipped_missing_required_count,
     )
     with metadata_path.open("w", encoding="utf-8") as fout:
         json.dump(metadata, fout, ensure_ascii=False, indent=2)
 
     # 记录运行结束信息
     logger.info(
-        "run_end attempted_doc_count=%s doc_count=%s query_count=%s failure_count=%s retry_mode=%s",
-        doc_result.attempted_docs,
+        "run_end attempted_doc_count=%s attempted_query_count=%s doc_count=%s query_count=%s "
+        "doc_failure_count=%s query_failure_count=%s retry_mode=%s",
+        doc_result.attempted_count,
+        query_result.attempted_count,
         len(merged_docs_df),
-        len(query_df),
+        len(query_result.output_df),
         len(doc_result.failures),
+        len(query_result.failures),
         retry_mode,
     )

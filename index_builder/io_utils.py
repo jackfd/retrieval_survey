@@ -46,6 +46,14 @@ def load_failures(path: Path) -> List[str]:
         return []
     doc_ids: List[str] = []
     for _, obj in read_jsonl(path):
+        record_type = str(obj.get("record_type", "")).strip()
+        if record_type and record_type != "doc":
+            continue
+        record_id = str(obj.get("record_id", "")).strip()
+        if record_id:
+            doc_ids.append(record_id)
+            continue
+        # Backward compatibility for old failures.jsonl format.
         doc_id = str(obj.get("doc_id", "")).strip()
         if doc_id:
             doc_ids.append(doc_id)
@@ -82,4 +90,3 @@ def merge_docs_with_retry(
     if not merged_docs_df.empty:
         merged_docs_df = merged_docs_df.drop_duplicates(subset=["doc_id"], keep="last")
     return merged_docs_df
-

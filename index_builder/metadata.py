@@ -16,7 +16,11 @@ def build_run_metadata(
     merged_docs_df: pd.DataFrame,
     query_df: pd.DataFrame,
     attempted_docs: int,
-    failures_count: int,
+    attempted_queries: int,
+    doc_failures_count: int,
+    query_failures_count: int,
+    skipped_missing_required_docs: int,
+    skipped_missing_required_queries: int,
 ) -> Dict[str, Any]:
     runtime = builder_cfg.runtime
     model = builder_cfg.model
@@ -54,8 +58,13 @@ def build_run_metadata(
         },
         "stats": {
             "attempted_doc_count": attempted_docs,
+            "attempted_query_count": attempted_queries,
             "doc_count": int(len(merged_docs_df)),
             "query_count": int(len(query_df)),
-            "failure_count": int(failures_count),
+            "doc_failure_count": int(doc_failures_count),
+            "query_failure_count": int(query_failures_count),
+            "failure_count": int(doc_failures_count + query_failures_count),
+            "skipped_missing_required_doc_count": int(skipped_missing_required_docs),
+            "skipped_missing_required_query_count": int(skipped_missing_required_queries),
         },
     }
