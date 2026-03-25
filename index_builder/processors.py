@@ -45,6 +45,22 @@ def process_docs(
     retry_id_set: set[str],
     logger,
 ) -> DocProcessResult:
+    """处理文档并将它们转换为嵌入向量格式
+
+    该函数读取JSONL文件中的文档，对每个文档进行分块选择，并生成相应的嵌入向量。
+    在重试模式下，只处理retry_id_set中指定的文档ID。
+
+    Args:
+        docs_path: 包含文档的JSONL文件路径
+        selector: 用于选择文档块的对象，具有select_chunks方法
+        runtime: 运行时配置对象，包含嵌入维度等信息
+        retry_mode: 是否为重试模式，如果是则只处理retry_id_set中的文档
+        retry_id_set: 重试模式下需要处理的文档ID集合
+        logger: 用于记录错误和日志消息的日志记录器
+
+    Returns:
+        DocProcessResult: 包含处理后的文档DataFrame、失败记录列表和尝试处理的文档数
+    """
     doc_records: List[Dict[str, Any]] = []
     failures: List[Dict[str, str]] = []
     attempted_docs = 0
@@ -63,7 +79,9 @@ def process_docs(
             if not selected:
                 raise ChunkSelectionError("No chunk selected")
             first = selected[0]
-            chunk_text = str(first.get("chunk_text") or first.get("chunk") or "").strip()
+            chunk_text = str(
+                first.get("chunk_text") or first.get("chunk") or ""
+            ).strip()
             embedding = np.asarray(first.get("embedding", []), dtype=np.float32)
             if not chunk_text:
                 raise ChunkSelectionError("Selected chunk text is empty")
@@ -81,7 +99,13 @@ def process_docs(
             )
         except Exception as exc:
             error_type = type(exc).__name__
-            logger.error("doc_failed doc_id=%s error_type=%s error=%s", doc_id, error_type, exc, exc_info=True)
+            logger.error(
+                "doc_failed doc_id=%s error_type=%s error=%s",
+                doc_id,
+                error_type,
+                exc,
+                exc_info=True,
+            )
             failures.append(
                 {
                     "doc_id": doc_id,
@@ -91,8 +115,12 @@ def process_docs(
                 }
             )
 
-    docs_df = pd.DataFrame(doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"])
-    return DocProcessResult(docs_df=docs_df, failures=failures, attempted_docs=attempted_docs)
+    docs_df = pd.DataFrame(
+        doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
+    )
+    return DocProcessResult(
+        docs_df=docs_df, failures=failures, attempted_docs=attempted_docs
+    )
 
 
 def process_queries(
@@ -115,12 +143,17 @@ def process_queries(
         if query_texts
         else np.empty((0, runtime.embedding_dim))
     )
-    query_vecs = ensure_embedding_shape(query_vecs, runtime.embedding_dim) if query_texts else query_vecs
+    query_vecs = (
+        ensure_embedding_shape(query_vecs, runtime.embedding_dim)
+        if query_texts
+        else query_vecs
+    )
     return pd.DataFrame(
         {
             "query_id": query_ids,
             "query_text": query_texts,
-            "query_embedding": [vec.tolist() for vec in query_vecs] if len(query_ids) else [],
+            "query_embedding": (
+                [vec.tolist() for vec in query_vecs] if len(query_ids) else []
+            ),
         }
     )
-
