@@ -12,13 +12,17 @@ from embed_pipe.infra.jsonl_reader import JsonlReader
 
 
 class DocumentService:
-    def __init__(self, selector, runtime: RuntimeConfig, jsonl_reader: JsonlReader | None = None):
+    def __init__(
+        self, selector, runtime: RuntimeConfig, jsonl_reader: JsonlReader | None = None
+    ):
         self.selector = selector
         self.runtime = runtime
         self.jsonl_reader = jsonl_reader or JsonlReader()
         self.logger = logging.getLogger("embed_pipe")
 
-    def process(self, docs_path: Path, retry_mode: bool, retry_id_set: set[str]) -> Result[ProcessResult]:
+    def process(
+        self, docs_path: Path, retry_mode: bool, retry_id_set: set[str]
+    ) -> Result[ProcessResult]:
         doc_records: List[Dict[str, Any]] = []
         failures: List[Dict[str, str]] = []
         attempted_count = 0
@@ -98,5 +102,11 @@ class DocumentService:
                 }
             )
 
-        docs_df = pd.DataFrame(doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"])
-        return Result.success(ProcessResult(output_df=docs_df, failures=failures, attempted_count=attempted_count))
+        docs_df = pd.DataFrame(
+            doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
+        )
+        return Result.success(
+            ProcessResult(
+                output_df=docs_df, failures=failures, attempted_count=attempted_count
+            )
+        )

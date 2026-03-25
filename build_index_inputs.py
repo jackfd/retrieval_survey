@@ -10,12 +10,24 @@ from embed_pipe.infra.logger import setup_logger
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build index input artifacts for one model.")
-    parser.add_argument("--dataset-path", required=True, help="Path to datasets root directory.")
-    parser.add_argument("--dataset-name", required=True, help="Sub-dataset directory name.")
-    parser.add_argument("--model-name", required=True, help="Model name key in model_config.yaml.")
-    parser.add_argument("--config-path", default="model_config.yaml", help="Path to model config YAML.")
-    parser.add_argument("--output-root", default="output", help="Output root directory.")
+    parser = argparse.ArgumentParser(
+        description="Build index input artifacts for one model."
+    )
+    parser.add_argument(
+        "--dataset-path", required=True, help="Path to datasets root directory."
+    )
+    parser.add_argument(
+        "--dataset-name", required=True, help="Sub-dataset directory name."
+    )
+    parser.add_argument(
+        "--model-name", required=True, help="Model name key in model_config.yaml."
+    )
+    parser.add_argument(
+        "--config-path", default="model_config.yaml", help="Path to model config YAML."
+    )
+    parser.add_argument(
+        "--output-root", default="output", help="Output root directory."
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_root) / args.dataset_name / args.model_name
@@ -26,7 +38,9 @@ def main() -> int:
     dataset_loader = DatasetLoader()
     strategy_factory = EmbeddingStrategyFactory()
 
-    builder_cfg_result = config_loader.load_builder_config(Path(args.config_path), model_name=args.model_name)
+    builder_cfg_result = config_loader.load_builder_config(
+        Path(args.config_path), model_name=args.model_name
+    )
     if not builder_cfg_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
@@ -35,7 +49,9 @@ def main() -> int:
         )
         return 1
 
-    dataset_ctx_result = dataset_loader.load_dataset_context(Path(args.dataset_path), dataset_name=args.dataset_name)
+    dataset_ctx_result = dataset_loader.load_dataset_context(
+        Path(args.dataset_path), dataset_name=args.dataset_name
+    )
     if not dataset_ctx_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
@@ -47,10 +63,16 @@ def main() -> int:
     builder_cfg = builder_cfg_result.value
     dataset_ctx = dataset_ctx_result.value
     if builder_cfg is None or dataset_ctx is None:
-        logger.error("event=builder_start_failed reason=%s context=%s", "Missing required runtime objects", "")
+        logger.error(
+            "event=builder_start_failed reason=%s context=%s",
+            "Missing required runtime objects",
+            "",
+        )
         return 1
 
-    embedding_strategy_result = strategy_factory.build(builder_cfg.runtime, builder_cfg.model)
+    embedding_strategy_result = strategy_factory.build(
+        builder_cfg.runtime, builder_cfg.model
+    )
     if not embedding_strategy_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
@@ -60,20 +82,28 @@ def main() -> int:
         return 1
     embedding_strategy = embedding_strategy_result.value
     if embedding_strategy is None:
-        logger.error("event=builder_start_failed reason=%s context=%s", "Embedding strategy is empty", "")
+        logger.error(
+            "event=builder_start_failed reason=%s context=%s",
+            "Embedding strategy is empty",
+            "",
+        )
         return 1
 
     runner = BuilderRunner(
-        dataset_name=args.dataset_name,
         output_dir=output_dir,
         dataset_ctx=dataset_ctx,
         builder_cfg=builder_cfg,
         embedding_strategy=embedding_strategy,
-        logger=logger,
+    )
+    logger.info(
+        "dataset_root=%s dataset_dir=%s dataset_name=%s model_name=%s",
+        dataset_ctx.dataset_root,
+        dataset_ctx.resolved_dataset_dir,
+        args.dataset_name,
+        builder_cfg.model,
     )
     run_result = runner.run()
     if not run_result.ok:
-        logger.error("event=run_failed reason=%s context=%s", run_result.error_message, "")
         return 1
 
     return 0

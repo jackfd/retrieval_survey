@@ -16,5 +16,5 @@ class Result(Generic[T]):
         return cls(ok=True, value=value, error_message="")
 
     @classmethod
-    def failure(cls, error_message: str) -> "Result[T]":
+    def failure(cls, error_message: str = "") -> "Result[T]":
         return cls(ok=False, value=None, error_message=error_message)

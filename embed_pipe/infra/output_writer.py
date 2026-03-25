@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import pandas as pd
 
@@ -17,9 +17,9 @@ class OutputWriter:
         self.metadata_path = self.output_dir / "run_metadata.json"
         self._jsonl_reader = jsonl_reader or JsonlReader()
 
-    def load_failed_doc_ids(self) -> List[str]:
+    def load_failed_doc_ids(self) -> Set[str]:
         if not self.failures_path.exists():
-            return []
+            return set()
 
         doc_ids: List[str] = []
         for _, obj in self._jsonl_reader.read_objects(self.failures_path):
@@ -34,7 +34,8 @@ class OutputWriter:
             doc_id = str(obj.get("doc_id", "")).strip()
             if doc_id:
                 doc_ids.append(doc_id)
-        return doc_ids
+        retry_id_set = set(doc_ids)
+        return retry_id_set
 
     def load_existing_docs(self) -> pd.DataFrame:
         if not self.docs_parquet_path.exists():
@@ -50,7 +51,9 @@ class OutputWriter:
         retry_id_set: set[str],
     ) -> pd.DataFrame:
         if retry_mode and not existing_docs_df.empty:
-            no_retry_df = existing_docs_df[~existing_docs_df["doc_id"].isin(retry_id_set)]
+            no_retry_df = existing_docs_df[
+                ~existing_docs_df["doc_id"].isin(retry_id_set)
+            ]
             merged_docs_df = pd.concat([no_retry_df, new_docs_df], ignore_index=True)
         elif retry_mode and existing_docs_df.empty:
             merged_docs_df = new_docs_df
@@ -58,7 +61,9 @@ class OutputWriter:
             merged_docs_df = new_docs_df
 
         if not merged_docs_df.empty:
-            merged_docs_df = merged_docs_df.drop_duplicates(subset=["doc_id"], keep="last")
+            merged_docs_df = merged_docs_df.drop_duplicates(
+                subset=["doc_id"], keep="last"
+            )
         return merged_docs_df
 
     def write_docs(self, docs_df: pd.DataFrame) -> None:
@@ -75,3 +80,16 @@ class OutputWriter:
     def write_metadata(self, metadata: Dict[str, object]) -> None:
         with self.metadata_path.open("w", encoding="utf-8") as fout:
             json.dump(metadata, fout, ensure_ascii=False, indent=2)
+
+    def write_all_outputs(
+        self,
+        *,
+        docs_df: pd.DataFrame,
+        queries_df: pd.DataFrame,
+        failures: List[Dict[str, str]],
+        metadata: Dict[str, object],
+    ) -> None:
+        self.write_docs(docs_df)
+        self.write_queries(queries_df)
+        self.write_failures(failures)
+        self.write_metadata(metadata)
