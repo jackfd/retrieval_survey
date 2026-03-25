@@ -11,7 +11,6 @@ def utc_now_iso() -> str:
 class FailureRecord:
     record_type: str
     record_id: str
-    error_type: str
     error_message: str
     stage: str
 
@@ -19,7 +18,6 @@ class FailureRecord:
         return {
             "record_type": self.record_type,
             "record_id": self.record_id,
-            "error_type": self.error_type,
             "error_message": self.error_message,
             "timestamp_utc": utc_now_iso(),
             "stage": self.stage,

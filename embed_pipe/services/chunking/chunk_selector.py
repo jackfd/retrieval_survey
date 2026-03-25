@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from embed_pipe.infra.embedding_gateway import BaseEmbeddingStrategy, ensure_embedding_shape
+from embed_pipe.infra.embedding_strategies import BaseEmbeddingStrategy, ensure_embedding_shape
 from .chunk_clusterer import ChunkClusterer
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter
@@ -13,11 +13,6 @@ from .stopwords_loader import StopwordsLoader
 
 
 class ChunkSelector:
-    """
-    文本块选择器：编排 Splitter / EmbeddingStrategy / Scorer / Clusterer。
-    对外保持原有方法兼容。
-    """
-
     def __init__(
         self,
         embedding_strategy: BaseEmbeddingStrategy,
@@ -31,9 +26,7 @@ class ChunkSelector:
 
         cluster_num = max(1, int(self.chunk_num * self.config.cluster_ratio))
 
-        self.text_processor = text_processor or ChunkSplitter(
-            min_sentences=3, max_tokens=8092
-        )
+        self.text_processor = text_processor or ChunkSplitter(min_sentences=3, max_tokens=8092)
         self.stop_words = StopwordsLoader.load_stopwords()
 
         self.clusterer = ChunkClusterer(cluster_num=cluster_num)
@@ -54,13 +47,11 @@ class ChunkSelector:
     def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
         return self.clusterer.cluster_chunks(embeddings)
 
-    def compute_scores(
-        self, chunks: List[str], candidate_idxs: List[int], title: str = ""
-    ) -> np.ndarray:
+    def compute_scores(self, chunks: List[str], candidate_idxs: List[int], title: str = "") -> np.ndarray:
         return self.scorer.compute_scores(chunks, candidate_idxs, title=title)
 
     def select_chunks(self, text: str, title: str) -> List[Dict]:
-        logger = logging.getLogger("index_builder")
+        logger = logging.getLogger("embed_pipe")
         chunks = self.text_processor.split_paragraphs(text)
         if not chunks:
             logger.error(
@@ -131,16 +122,13 @@ class ChunkSelector:
             top_indices = np.argsort(scores)[-self.chunk_num :][::-1]
 
         result = []
-        for i in top_indices:
-            idx = candidate_idxs[int(i)]
+        for index in top_indices:
+            candidate_index = candidate_idxs[int(index)]
             result.append(
                 {
-                    "chunk_text": chunks[idx],
-                    "score": float(scores[int(i)]),
-                    "embedding": embeddings[idx].tolist(),
+                    "chunk_text": chunks[candidate_index],
+                    "score": float(scores[int(index)]),
+                    "embedding": embeddings[candidate_index].tolist(),
                 }
             )
         return result
-
-
-__all__ = ["ChunkSelector", "SelectorConfig"]

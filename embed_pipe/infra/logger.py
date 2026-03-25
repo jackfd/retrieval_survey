@@ -10,7 +10,7 @@ def utc_now_iso() -> str:
 
 def setup_logger(log_file: Path) -> logging.Logger:
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("index_builder")
+    logger = logging.getLogger("embed_pipe")
     logger.setLevel(logging.INFO)
     logger.handlers = []
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(filename)s:%(lineno)d %(message)s")

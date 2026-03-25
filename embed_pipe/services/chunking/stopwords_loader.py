@@ -7,10 +7,6 @@ import yaml
 
 
 class StopwordsLoader:
-    """
-    工业级停用词加载器：支持自定义配置 + spaCy轻量停用词 + sklearn回退。
-    """
-
     _cached_stopwords: set[str] | None = None
 
     @staticmethod
@@ -51,25 +47,21 @@ class StopwordsLoader:
             if not os.path.exists(config_path):
                 continue
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
+                with open(config_path, "r", encoding="utf-8") as file_handle:
+                    config = yaml.safe_load(file_handle) or {}
                 if not isinstance(config, dict):
-                    logging.getLogger("index_builder").error(
+                    logging.getLogger("embed_pipe").error(
                         "event=stopwords_config_invalid reason=%s context=%s",
                         "Invalid stopwords config format",
                         "config_path=%s" % config_path,
                     )
                     continue
 
-                StopwordsLoader._extend_if_iterable(
-                    custom_stopwords, config.get("english_stopwords")
-                )
-                StopwordsLoader._extend_if_iterable(
-                    custom_stopwords, config.get("chinese_stopwords")
-                )
+                StopwordsLoader._extend_if_iterable(custom_stopwords, config.get("english_stopwords"))
+                StopwordsLoader._extend_if_iterable(custom_stopwords, config.get("chinese_stopwords"))
                 return custom_stopwords
             except Exception as exc:
-                logging.getLogger("index_builder").error(
+                logging.getLogger("embed_pipe").error(
                     "event=stopwords_load_failed reason=%s context=%s",
                     exc,
                     "config_path=%s" % config_path,
@@ -104,7 +96,7 @@ class StopwordsLoader:
 
             fallback_stopwords.update({word.lower() for word in ENGLISH_STOP_WORDS})
         except ImportError:
-            logging.getLogger("index_builder").error(
+            logging.getLogger("embed_pipe").error(
                 "event=stopwords_fallback_unavailable reason=%s context=%s",
                 "sklearn is not installed, fallback stopwords unavailable",
                 "provider=sklearn",

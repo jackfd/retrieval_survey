@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from chunk_selector.chunk_selector import ChunkSelector
-from chunk_selector.selector_config import SelectorConfig
 from embed_pipe.domain.models import BuilderConfig, DatasetContext
-from embed_pipe.infra.embedding_gateway import EmbeddingStrategy
+from embed_pipe.domain.result import Result
+from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
 from embed_pipe.infra.logger import utc_now_iso
 from embed_pipe.infra.output_writer import OutputWriter
+from embed_pipe.services.chunking import ChunkSelector, SelectorConfig
 from embed_pipe.services.document_service import DocumentService
 from embed_pipe.services.metadata_service import MetadataService
 from embed_pipe.services.query_service import QueryService
@@ -29,7 +29,7 @@ class BuilderRunner:
         self.embedding_strategy = embedding_strategy
         self.logger = logger
 
-    def run(self) -> None:
+    def run(self) -> Result[None]:
         runtime = self.builder_cfg.runtime
         model = self.builder_cfg.model
 
@@ -59,10 +59,16 @@ class BuilderRunner:
             retry_mode=retry_mode,
             retry_id_set=retry_id_set,
         )
+        if not doc_result.ok:
+            return Result.failure(doc_result.error_message)
+
+        doc_value = doc_result.value
+        if doc_value is None:
+            return Result.failure("Document service returned empty result")
 
         existing_docs_df = self.output_writer.load_existing_docs()
         merged_docs_df = self.output_writer.merge_docs_with_retry(
-            new_docs_df=doc_result.output_df,
+            new_docs_df=doc_value.output_df,
             existing_docs_df=existing_docs_df,
             retry_mode=retry_mode,
             retry_id_set=retry_id_set,
@@ -70,9 +76,16 @@ class BuilderRunner:
         self.output_writer.write_docs(merged_docs_df)
 
         query_result = query_service.process(self.dataset_ctx.queries_path)
-        self.output_writer.write_queries(query_result.output_df)
+        if not query_result.ok:
+            return Result.failure(query_result.error_message)
 
-        all_failures = doc_result.failures + query_result.failures
+        query_value = query_result.value
+        if query_value is None:
+            return Result.failure("Query service returned empty result")
+
+        self.output_writer.write_queries(query_value.output_df)
+
+        all_failures = doc_value.failures + query_value.failures
         self.output_writer.write_failures(all_failures)
 
         metadata_service = MetadataService()
@@ -84,22 +97,23 @@ class BuilderRunner:
             dataset_ctx=self.dataset_ctx,
             builder_cfg=self.builder_cfg,
             merged_docs_df=merged_docs_df,
-            query_df=query_result.output_df,
-            attempted_docs=doc_result.attempted_count,
-            attempted_queries=query_result.attempted_count,
-            doc_failures_count=len(doc_result.failures),
-            query_failures_count=len(query_result.failures),
+            query_df=query_value.output_df,
+            attempted_docs=doc_value.attempted_count,
+            attempted_queries=query_value.attempted_count,
+            doc_failures_count=len(doc_value.failures),
+            query_failures_count=len(query_value.failures),
         )
         self.output_writer.write_metadata(metadata)
 
         self.logger.info(
             "run_end attempted_doc_count=%s attempted_query_count=%s doc_count=%s query_count=%s "
             "doc_failure_count=%s query_failure_count=%s retry_mode=%s",
-            doc_result.attempted_count,
-            query_result.attempted_count,
+            doc_value.attempted_count,
+            query_value.attempted_count,
             len(merged_docs_df),
-            len(query_result.output_df),
-            len(doc_result.failures),
-            len(query_result.failures),
+            len(query_value.output_df),
+            len(doc_value.failures),
+            len(query_value.failures),
             retry_mode,
         )
+        return Result.success(None)

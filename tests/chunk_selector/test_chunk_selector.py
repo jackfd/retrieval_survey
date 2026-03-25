@@ -3,10 +3,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from chunk_selector import ChunkSelector, SelectorConfig
-from embed_pipe.domain.errors import EmbeddingGenerationError
 from embed_pipe.domain.models import RuntimeConfig
-from embed_pipe.infra.embedding_gateway import BaseEmbeddingStrategy
+from embed_pipe.infra.embedding_strategies import BaseEmbeddingStrategy
+from embed_pipe.services.chunking import ChunkSelector, SelectorConfig
 
 
 class _DummyEmbeddingStrategy(BaseEmbeddingStrategy):
@@ -30,7 +29,7 @@ class _DummyEmbeddingStrategy(BaseEmbeddingStrategy):
 
     def encode(self, texts, is_query):
         if self.fail:
-            raise EmbeddingGenerationError("mock encode failed")
+            raise RuntimeError("mock encode failed")
         return np.ones((len(texts), self.dim), dtype=np.float32)
 
 
@@ -86,7 +85,7 @@ class TestChunkSelector(unittest.TestCase):
 
     @patch.object(ChunkSelector, "get_embeddings")
     def test_embedding_failure_returns_empty(self, mock_get_embeddings):
-        mock_get_embeddings.side_effect = EmbeddingGenerationError("timeout")
+        mock_get_embeddings.side_effect = RuntimeError("timeout")
         results = self.selector.select_chunks(self.text, "标题")
         self.assertEqual(results, [])
 

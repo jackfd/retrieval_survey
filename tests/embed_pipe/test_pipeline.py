@@ -54,7 +54,6 @@ class TestPipeline(unittest.TestCase):
                     {
                         "record_type": "doc",
                         "record_id": "d_fail",
-                        "error_type": "ChunkSelectionError",
                         "error_message": "bad",
                         "timestamp_utc": "2026-01-01T00:00:00Z",
                         "stage": "chunk_selection",
@@ -70,7 +69,6 @@ class TestPipeline(unittest.TestCase):
                     {
                         "record_type": "query",
                         "record_id": "q_fail",
-                        "error_type": "EmbeddingGenerationError",
                         "error_message": "bad",
                         "timestamp_utc": "2026-01-01T00:00:01Z",
                         "stage": "embedding",
@@ -80,10 +78,12 @@ class TestPipeline(unittest.TestCase):
             )
 
             with patch("embed_pipe.app.runner.ChunkSelector", return_value=Mock()):
-                with patch("embed_pipe.app.runner.DocumentService.process", return_value=doc_result):
-                    with patch("embed_pipe.app.runner.QueryService.process", return_value=query_result):
+                with patch("embed_pipe.app.runner.DocumentService.process") as mock_doc_process:
+                    with patch("embed_pipe.app.runner.QueryService.process") as mock_query_process:
                         with patch("embed_pipe.app.runner.OutputWriter.write_docs", return_value=None):
                             with patch("embed_pipe.app.runner.OutputWriter.write_queries", return_value=None):
+                                mock_doc_process.return_value = Mock(ok=True, value=doc_result, error_message="")
+                                mock_query_process.return_value = Mock(ok=True, value=query_result, error_message="")
                                 runner = BuilderRunner(
                                     dataset_name="ds",
                                     output_dir=root / "out" / "ds" / "m",
@@ -92,7 +92,8 @@ class TestPipeline(unittest.TestCase):
                                     embedding_strategy=Mock(),
                                     logger=Mock(),
                                 )
-                                runner.run()
+                                result = runner.run()
+                                self.assertTrue(result.ok)
 
             output_dir = root / "out" / "ds" / "m"
             failures_path = output_dir / "failures.jsonl"

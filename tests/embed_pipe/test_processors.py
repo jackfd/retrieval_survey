@@ -5,7 +5,6 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from embed_pipe.domain.errors import ChunkSelectionError, EmbeddingGenerationError, InputValidationError
 from embed_pipe.domain.models import RuntimeConfig
 from embed_pipe.services.document_service import DocumentService
 from embed_pipe.services.query_service import QueryService
@@ -58,17 +57,18 @@ class TestProcessors(unittest.TestCase):
         )
         selector = Mock()
 
-        with self.assertRaises(InputValidationError):
-            DocumentService(selector=selector, runtime=self.runtime).process(
-                docs_path=docs_path,
-                retry_mode=False,
-                retry_id_set=set(),
-            )
+        result = DocumentService(selector=selector, runtime=self.runtime).process(
+            docs_path=docs_path,
+            retry_mode=False,
+            retry_id_set=set(),
+        )
+        self.assertFalse(result.ok)
+        self.assertIn("doc_id/doc_text must be non-empty", result.error_message)
 
     def test_process_docs_chunk_selection_failure_stage(self):
         docs_path = self._write_jsonl(['{"doc_id": "d1", "doc_text": "text"}'])
         selector = Mock()
-        selector.select_chunks.side_effect = ChunkSelectionError("No chunk selected")
+        selector.select_chunks.side_effect = RuntimeError("No chunk selected")
 
         result = DocumentService(selector=selector, runtime=self.runtime).process(
             docs_path=docs_path,
@@ -76,10 +76,11 @@ class TestProcessors(unittest.TestCase):
             retry_id_set=set(),
         )
 
-        self.assertEqual(result.attempted_count, 1)
-        self.assertEqual(len(result.failures), 1)
-        self.assertEqual(result.failures[0]["record_type"], "doc")
-        self.assertEqual(result.failures[0]["stage"], "chunk_selection")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.value.attempted_count, 1)
+        self.assertEqual(len(result.value.failures), 1)
+        self.assertEqual(result.value.failures[0]["record_type"], "doc")
+        self.assertEqual(result.value.failures[0]["stage"], "chunk_selection")
 
     def test_process_queries_records_embedding_failure(self):
         queries_path = self._write_jsonl(
@@ -87,7 +88,7 @@ class TestProcessors(unittest.TestCase):
         )
         embedding_strategy = _DummyEmbeddingStrategy(
             {
-                "bad": EmbeddingGenerationError("boom"),
+                "bad": RuntimeError("boom"),
                 "good": [0.1, 0.2, 0.3],
             }
         )
@@ -96,11 +97,12 @@ class TestProcessors(unittest.TestCase):
             queries_path=queries_path,
         )
 
-        self.assertEqual(result.attempted_count, 2)
-        self.assertEqual(len(result.output_df), 1)
-        self.assertEqual(len(result.failures), 1)
-        self.assertEqual(result.failures[0]["record_type"], "query")
-        self.assertEqual(result.failures[0]["stage"], "embedding")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.value.attempted_count, 2)
+        self.assertEqual(len(result.value.output_df), 1)
+        self.assertEqual(len(result.value.failures), 1)
+        self.assertEqual(result.value.failures[0]["record_type"], "query")
+        self.assertEqual(result.value.failures[0]["stage"], "embedding")
 
 
 if __name__ == "__main__":

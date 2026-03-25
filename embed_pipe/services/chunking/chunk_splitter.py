@@ -5,10 +5,6 @@ from typing import Callable, List
 
 
 class ChunkSplitter:
-    """
-    文本处理器类，专门负责文本分割和预处理功能。
-    """
-
     _LIST_ITEM_PATTERN = re.compile(r"^(?:[-*−•·▪‣]|\d+[\.)。、])\s+")
     _SENTENCE_SPLIT_PATTERN = re.compile(r"[。.！!?；;]+")
 
@@ -24,11 +20,8 @@ class ChunkSplitter:
         self.token_counter = token_counter
 
     def split_paragraphs(self, text: str) -> List[str]:
-        """
-        将文本分割成段落。
-        """
         if not isinstance(text, str) or not text.strip():
-            logging.getLogger("index_builder").error(
+            logging.getLogger("embed_pipe").error(
                 "event=splitter_degrade reason=%s context=%s",
                 "Invalid input text for split_paragraphs",
                 "text_type=%s" % type(text).__name__,
@@ -37,30 +30,28 @@ class ChunkSplitter:
 
         raw_paragraphs = re.split(r"\n{2,}", text)
         chunks = []
-        for p in raw_paragraphs:
-            p = p.strip()
-            if not p:
+        for paragraph in raw_paragraphs:
+            paragraph = paragraph.strip()
+            if not paragraph:
                 continue
 
-            if self._count_tokens(p) > self.max_tokens:
-                chunks.extend(self._split_large_paragraph(p))
-            elif chunks and self._LIST_ITEM_PATTERN.match(p):
-                chunks[-1] += " " + p
-            elif chunks and self._sentence_count(p) < self.min_sentences:
-                if self._LIST_ITEM_PATTERN.match(p):
-                    chunks[-1] += " " + p
-                elif re.search(r"[。.！!?；;]\s*$", p):
-                    chunks.append(p)
+            if self._count_tokens(paragraph) > self.max_tokens:
+                chunks.extend(self._split_large_paragraph(paragraph))
+            elif chunks and self._LIST_ITEM_PATTERN.match(paragraph):
+                chunks[-1] += " " + paragraph
+            elif chunks and self._sentence_count(paragraph) < self.min_sentences:
+                if self._LIST_ITEM_PATTERN.match(paragraph):
+                    chunks[-1] += " " + paragraph
+                elif re.search(r"[。.！!?；;]\s*$", paragraph):
+                    chunks.append(paragraph)
                 else:
-                    chunks[-1] += "\n" + p
+                    chunks[-1] += "\n" + paragraph
             else:
-                chunks.append(p)
+                chunks.append(paragraph)
         return chunks
 
     def _sentence_count(self, text: str) -> int:
-        sentences = [
-            s.strip() for s in self._SENTENCE_SPLIT_PATTERN.split(text) if s.strip()
-        ]
+        sentences = [segment.strip() for segment in self._SENTENCE_SPLIT_PATTERN.split(text) if segment.strip()]
         return len(sentences)
 
     def _count_tokens(self, text: str) -> int:
@@ -76,9 +67,6 @@ class ChunkSplitter:
         return max(1, estimated)
 
     def _split_large_paragraph(self, text: str) -> List[str]:
-        """
-        将超出最大长度的段落拆分成多个子块。
-        """
         sentences = re.split(r"([。.！!?；;—])", text)
         parts = []
         for i in range(0, len(sentences) - 1, 2):
@@ -113,9 +101,6 @@ class ChunkSplitter:
         return chunks
 
     def _split_long_sentence(self, sentence: str) -> List[str]:
-        """
-        将过长的句子按字符拆分。
-        """
         chars = list(sentence)
         chunks = []
         current_chunk = ""

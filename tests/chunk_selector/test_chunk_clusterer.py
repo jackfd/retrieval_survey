@@ -3,14 +3,14 @@ from unittest.mock import patch
 
 import numpy as np
 
-from chunk_clusterer import ChunkClusterer
+from embed_pipe.services.chunking.chunk_clusterer import ChunkClusterer
 
 
 class TestChunkClusterer(unittest.TestCase):
     def setUp(self):
         self.clusterer = ChunkClusterer(cluster_num=3)
 
-    @patch("chunk_clusterer.SKLEARN_AVAILABLE", False)
+    @patch("embed_pipe.services.chunking.chunk_clusterer.SKLEARN_AVAILABLE", False)
     def test_cluster_chunks_fallback(self):
         embeddings = np.array(
             [

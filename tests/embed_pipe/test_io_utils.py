@@ -13,9 +13,9 @@ class TestOutputWriter(unittest.TestCase):
             failures_path.write_text(
                 "\n".join(
                     [
-                        '{"record_type":"doc","record_id":"d1","error_type":"X","error_message":"m","timestamp_utc":"t","stage":"embedding"}',
-                        '{"record_type":"query","record_id":"q1","error_type":"X","error_message":"m","timestamp_utc":"t","stage":"embedding"}',
-                        '{"doc_id":"legacy_doc","error_type":"X","error_message":"m","timestamp_utc":"t"}',
+                        '{"record_type":"doc","record_id":"d1","error_message":"m","timestamp_utc":"t","stage":"embedding"}',
+                        '{"record_type":"query","record_id":"q1","error_message":"m","timestamp_utc":"t","stage":"embedding"}',
+                        '{"doc_id":"legacy_doc","error_message":"m","timestamp_utc":"t"}',
                     ]
                 )
                 + "\n",

@@ -32,8 +32,9 @@ class TestConfig(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            cfg = ConfigLoader().load_builder_config(cfg_path, "m")
-            self.assertEqual(cfg.runtime.embedding_api_url, "")
+            result = ConfigLoader().load_builder_config(cfg_path, "m")
+            self.assertTrue(result.ok)
+            self.assertEqual(result.value.runtime.embedding_api_url, "")
 
     def test_non_empty_embedding_api_url(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,8 +61,9 @@ class TestConfig(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            cfg = ConfigLoader().load_builder_config(cfg_path, "m")
-            self.assertEqual(cfg.runtime.embedding_api_url, "http://localhost:9000/embed")
+            result = ConfigLoader().load_builder_config(cfg_path, "m")
+            self.assertTrue(result.ok)
+            self.assertEqual(result.value.runtime.embedding_api_url, "http://localhost:9000/embed")
 
 
 if __name__ == "__main__":

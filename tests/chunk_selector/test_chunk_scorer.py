@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from chunk_scorer import ChunkScorer
-from selector_config import SelectorConfig
+from embed_pipe.services.chunking.chunk_scorer import ChunkScorer
+from embed_pipe.services.chunking.selector_config import SelectorConfig
 
 
 class TestChunkScorer(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestChunkScorer(unittest.TestCase):
             "中文 测试 文本",
         ]
 
-    @patch("chunk_scorer.SKLEARN_AVAILABLE", False)
+    @patch("embed_pipe.services.chunking.chunk_scorer.SKLEARN_AVAILABLE", False)
     def test_compute_global_statistics_fallback(self):
         self.scorer.compute_global_statistics(self.chunks)
 
@@ -25,7 +25,7 @@ class TestChunkScorer(unittest.TestCase):
         self.assertGreaterEqual(len(self.scorer.keywords), 1)
         self.assertEqual(len(self.scorer.text_rank_scores), len(self.chunks))
 
-    @patch("chunk_scorer.SKLEARN_AVAILABLE", False)
+    @patch("embed_pipe.services.chunking.chunk_scorer.SKLEARN_AVAILABLE", False)
     def test_compute_scores(self):
         self.scorer.compute_global_statistics(self.chunks)
         candidate_idxs = [0, 1, 2]
@@ -35,7 +35,7 @@ class TestChunkScorer(unittest.TestCase):
         self.assertEqual(scores.shape[0], len(candidate_idxs))
         self.assertTrue(np.all(np.isfinite(scores)))
 
-    @patch("chunk_scorer.SKLEARN_AVAILABLE", False)
+    @patch("embed_pipe.services.chunking.chunk_scorer.SKLEARN_AVAILABLE", False)
     def test_empty_vocabulary_raises(self):
         with self.assertRaises(ValueError):
             self.scorer.compute_global_statistics(["the and of", "and of the"])

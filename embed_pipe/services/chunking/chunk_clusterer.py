@@ -17,7 +17,7 @@ class ChunkClusterer:
         self.cluster_num = max(1, int(cluster_num))
 
     def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
-        logger = logging.getLogger("index_builder")
+        logger = logging.getLogger("embed_pipe")
         if embeddings.ndim != 2 or embeddings.shape[0] == 0:
             logger.error(
                 "event=cluster_degrade reason=%s context=%s",

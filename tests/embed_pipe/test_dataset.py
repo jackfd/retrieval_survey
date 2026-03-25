@@ -2,7 +2,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from embed_pipe.domain.errors import InputValidationError
 from embed_pipe.infra.dataset_loader import DatasetLoader
 
 
@@ -13,14 +12,16 @@ class TestDatasetResolution(unittest.TestCase):
             (root / "MSMARCO").mkdir()
             (root / "HotpotQA").mkdir()
             resolved = DatasetLoader().resolve_subdataset_dir(root, "MSMARCO")
-            self.assertEqual(resolved.name, "MSMARCO")
+            self.assertTrue(resolved.ok)
+            self.assertEqual(resolved.value.name, "MSMARCO")
 
     def test_case_insensitive_unique_match(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "HotpotQA").mkdir()
             resolved = DatasetLoader().resolve_subdataset_dir(root, "hotpotqa")
-            self.assertEqual(resolved.name, "HotpotQA")
+            self.assertTrue(resolved.ok)
+            self.assertEqual(resolved.value.name, "HotpotQA")
 
     def test_case_insensitive_ambiguous(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -30,8 +31,9 @@ class TestDatasetResolution(unittest.TestCase):
                 (root / "scifact").mkdir()
             except FileExistsError:
                 self.skipTest("Case-insensitive filesystem does not allow ambiguous case-only dirs")
-            with self.assertRaises(InputValidationError):
-                DatasetLoader().resolve_subdataset_dir(root, "SCIFACT")
+            resolved = DatasetLoader().resolve_subdataset_dir(root, "SCIFACT")
+            self.assertFalse(resolved.ok)
+            self.assertIn("Ambiguous", resolved.error_message)
 
 
 if __name__ == "__main__":
