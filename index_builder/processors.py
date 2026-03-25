@@ -69,6 +69,7 @@ def process_docs(
         doc_id = str(obj.get("doc_id", "")).strip()
         doc_text = str(obj.get("doc_text", "")).strip()
         if not doc_id or not doc_text:
+            logger.warning(f"doc_id:{doc_id}, doc id or text empty")
             continue
         if retry_mode and doc_id not in retry_id_set:
             continue
@@ -79,9 +80,7 @@ def process_docs(
             if not selected:
                 raise ChunkSelectionError("No chunk selected")
             first = selected[0]
-            chunk_text = str(
-                first.get("chunk_text") or first.get("chunk") or ""
-            ).strip()
+            chunk_text = str(first.get("chunk_text") or "").strip()
             embedding = np.asarray(first.get("embedding", []), dtype=np.float32)
             if not chunk_text:
                 raise ChunkSelectionError("Selected chunk text is empty")

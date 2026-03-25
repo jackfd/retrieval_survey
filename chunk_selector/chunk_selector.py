@@ -114,7 +114,6 @@ class ChunkSelector:
             idx = candidate_idxs[int(i)]
             result.append(
                 {
-                    "chunk": chunks[idx],
                     "chunk_text": chunks[idx],
                     "score": float(scores[int(i)]),
                     "embedding": embeddings[idx].tolist(),
