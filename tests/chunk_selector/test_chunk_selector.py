@@ -4,8 +4,9 @@ from unittest.mock import patch
 import numpy as np
 
 from chunk_selector import ChunkSelector, SelectorConfig
-from index_builder.config import RuntimeConfig
-from index_builder.embedding import BaseEmbeddingStrategy, EmbeddingGenerationError
+from embed_pipe.domain.errors import EmbeddingGenerationError
+from embed_pipe.domain.models import RuntimeConfig
+from embed_pipe.infra.embedding_gateway import BaseEmbeddingStrategy
 
 
 class _DummyEmbeddingStrategy(BaseEmbeddingStrategy):

@@ -5,9 +5,10 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from index_builder.config import RuntimeConfig
-from index_builder.errors import ChunkSelectionError, EmbeddingGenerationError, InputValidationError
-from index_builder.processors import process_docs, process_queries
+from embed_pipe.domain.errors import ChunkSelectionError, EmbeddingGenerationError, InputValidationError
+from embed_pipe.domain.models import RuntimeConfig
+from embed_pipe.services.document_service import DocumentService
+from embed_pipe.services.query_service import QueryService
 
 
 class _DummyEmbeddingStrategy:
@@ -58,10 +59,8 @@ class TestProcessors(unittest.TestCase):
         selector = Mock()
 
         with self.assertRaises(InputValidationError):
-            process_docs(
+            DocumentService(selector=selector, runtime=self.runtime).process(
                 docs_path=docs_path,
-                selector=selector,
-                runtime=self.runtime,
                 retry_mode=False,
                 retry_id_set=set(),
             )
@@ -71,10 +70,8 @@ class TestProcessors(unittest.TestCase):
         selector = Mock()
         selector.select_chunks.side_effect = ChunkSelectionError("No chunk selected")
 
-        result = process_docs(
+        result = DocumentService(selector=selector, runtime=self.runtime).process(
             docs_path=docs_path,
-            selector=selector,
-            runtime=self.runtime,
             retry_mode=False,
             retry_id_set=set(),
         )
@@ -95,10 +92,8 @@ class TestProcessors(unittest.TestCase):
             }
         )
 
-        result = process_queries(
+        result = QueryService(embedding_strategy=embedding_strategy, runtime=self.runtime).process(
             queries_path=queries_path,
-            embedding_strategy=embedding_strategy,
-            runtime=self.runtime,
         )
 
         self.assertEqual(result.attempted_count, 2)

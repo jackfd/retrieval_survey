@@ -1,11 +1,11 @@
 import argparse
 from pathlib import Path
 
-from index_builder.config import load_builder_config
-from index_builder.dataset import load_dataset_context
-from index_builder.embedding import build_embedding_strategy
-from index_builder.io_utils import setup_logger
-from index_builder.pipeline import run_builder
+from embed_pipe.app.runner import BuilderRunner
+from embed_pipe.infra.config_loader import ConfigLoader
+from embed_pipe.infra.dataset_loader import DatasetLoader
+from embed_pipe.infra.embedding_gateway import EmbeddingStrategyFactory
+from embed_pipe.infra.logger import setup_logger
 
 
 def main() -> None:
@@ -34,17 +34,15 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
-    builder_cfg = load_builder_config(
-        Path(args.config_path), model_name=args.model_name
-    )
-    dataset_ctx = load_dataset_context(
-        Path(args.dataset_path), dataset_name=args.dataset_name
-    )
-    embedding_strategy = build_embedding_strategy(
-        builder_cfg.runtime, builder_cfg.model
-    )
+    config_loader = ConfigLoader()
+    dataset_loader = DatasetLoader()
+    strategy_factory = EmbeddingStrategyFactory()
 
-    run_builder(
+    builder_cfg = config_loader.load_builder_config(Path(args.config_path), model_name=args.model_name)
+    dataset_ctx = dataset_loader.load_dataset_context(Path(args.dataset_path), dataset_name=args.dataset_name)
+    embedding_strategy = strategy_factory.build(builder_cfg.runtime, builder_cfg.model)
+
+    runner = BuilderRunner(
         dataset_name=args.dataset_name,
         output_dir=output_dir,
         dataset_ctx=dataset_ctx,
@@ -52,6 +50,7 @@ def main() -> None:
         embedding_strategy=embedding_strategy,
         logger=logger,
     )
+    runner.run()
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from index_builder.embedding import BaseEmbeddingStrategy, ensure_embedding_shape
+from embed_pipe.infra.embedding_gateway import BaseEmbeddingStrategy, ensure_embedding_shape
 from .chunk_clusterer import ChunkClusterer
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter

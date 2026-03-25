@@ -1,0 +1,1 @@
+"""Embed pipe package."""

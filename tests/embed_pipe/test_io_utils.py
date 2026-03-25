@@ -2,14 +2,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from index_builder.io_utils import load_failures
+from embed_pipe.infra.output_writer import OutputWriter
 
 
-class TestIoUtils(unittest.TestCase):
+class TestOutputWriter(unittest.TestCase):
     def test_load_failures_mixed_record_types_only_returns_doc_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "failures.jsonl"
-            path.write_text(
+            output_dir = Path(tmp)
+            failures_path = output_dir / "failures.jsonl"
+            failures_path.write_text(
                 "\n".join(
                     [
                         '{"record_type":"doc","record_id":"d1","error_type":"X","error_message":"m","timestamp_utc":"t","stage":"embedding"}',
@@ -21,7 +22,7 @@ class TestIoUtils(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            doc_ids = load_failures(path)
+            doc_ids = OutputWriter(output_dir=output_dir).load_failed_doc_ids()
             self.assertEqual(doc_ids, ["d1", "legacy_doc"])
 
 

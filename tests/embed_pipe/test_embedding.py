@@ -3,9 +3,9 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from index_builder.config import ModelConfig, RuntimeConfig
-from index_builder.embedding import HttpEmbeddingStrategy, build_embedding_strategy
-from index_builder.errors import EmbeddingGenerationError
+from embed_pipe.domain.errors import EmbeddingGenerationError
+from embed_pipe.domain.models import ModelConfig, RuntimeConfig
+from embed_pipe.infra.embedding_gateway import EmbeddingStrategyFactory, HttpEmbeddingStrategy
 
 
 class TestHttpEmbeddingStrategy(unittest.TestCase):
@@ -25,7 +25,7 @@ class TestHttpEmbeddingStrategy(unittest.TestCase):
         )
         self.strategy = HttpEmbeddingStrategy(runtime=self.runtime)
 
-    @patch("index_builder.embedding.requests.post")
+    @patch("embed_pipe.infra.embedding_gateway.requests.post")
     def test_encode_success(self, mock_post):
         resp = Mock()
         resp.raise_for_status.return_value = None
@@ -36,7 +36,7 @@ class TestHttpEmbeddingStrategy(unittest.TestCase):
         self.assertEqual(vecs.shape, (2, 3))
         self.assertTrue(np.allclose(vecs[0], np.array([0.1, 0.2, 0.3], dtype=np.float32)))
 
-    @patch("index_builder.embedding.requests.post")
+    @patch("embed_pipe.infra.embedding_gateway.requests.post")
     def test_encode_invalid_payload_raises(self, mock_post):
         resp = Mock()
         resp.raise_for_status.return_value = None
@@ -63,9 +63,9 @@ class TestStrategyRouting(unittest.TestCase):
             http_max_retries=1,
         )
         model = ModelConfig(model_name="m", provider="sentence_transformers", model_id="id")
-        with patch("index_builder.embedding.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
-            with patch("index_builder.embedding.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
-                strategy = build_embedding_strategy(runtime, model)
+        with patch("embed_pipe.infra.embedding_gateway.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
+            with patch("embed_pipe.infra.embedding_gateway.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
+                strategy = EmbeddingStrategyFactory().build(runtime, model)
                 self.assertEqual(strategy, "HTTP")
                 http_cls.assert_called_once()
                 local_cls.assert_not_called()
@@ -85,9 +85,9 @@ class TestStrategyRouting(unittest.TestCase):
             http_max_retries=1,
         )
         model = ModelConfig(model_name="m", provider="sentence_transformers", model_id="id")
-        with patch("index_builder.embedding.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
-            with patch("index_builder.embedding.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
-                strategy = build_embedding_strategy(runtime, model)
+        with patch("embed_pipe.infra.embedding_gateway.HttpEmbeddingStrategy", return_value="HTTP") as http_cls:
+            with patch("embed_pipe.infra.embedding_gateway.LocalEmbeddingStrategy", return_value="LOCAL") as local_cls:
+                strategy = EmbeddingStrategyFactory().build(runtime, model)
                 self.assertEqual(strategy, "LOCAL")
                 local_cls.assert_called_once()
                 http_cls.assert_not_called()

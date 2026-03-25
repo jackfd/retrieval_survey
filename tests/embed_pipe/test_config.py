@@ -3,7 +3,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from index_builder.config import load_builder_config
+from embed_pipe.infra.config_loader import ConfigLoader
 
 
 class TestConfig(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestConfig(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            cfg = load_builder_config(cfg_path, "m")
+            cfg = ConfigLoader().load_builder_config(cfg_path, "m")
             self.assertEqual(cfg.runtime.embedding_api_url, "")
 
     def test_non_empty_embedding_api_url(self):
@@ -60,10 +60,9 @@ class TestConfig(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            cfg = load_builder_config(cfg_path, "m")
+            cfg = ConfigLoader().load_builder_config(cfg_path, "m")
             self.assertEqual(cfg.runtime.embedding_api_url, "http://localhost:9000/embed")
 
 
 if __name__ == "__main__":
     unittest.main()
-

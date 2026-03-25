@@ -12,4 +12,3 @@ class EmbeddingGenerationError(Exception):
 
 class ChunkSelectionError(Exception):
     pass
-

@@ -6,10 +6,8 @@ from unittest.mock import Mock, patch
 
 import pandas as pd
 
-from index_builder.config import BuilderConfig, ModelConfig, RuntimeConfig
-from index_builder.dataset import DatasetContext
-from index_builder.pipeline import run_builder
-from index_builder.processors import ProcessResult
+from embed_pipe.app.runner import BuilderRunner
+from embed_pipe.domain.models import BuilderConfig, DatasetContext, ModelConfig, ProcessResult, RuntimeConfig
 
 
 class TestPipeline(unittest.TestCase):
@@ -81,18 +79,20 @@ class TestPipeline(unittest.TestCase):
                 attempted_count=1,
             )
 
-            with patch("index_builder.pipeline.ChunkSelector", return_value=Mock()):
-                with patch("index_builder.pipeline.process_docs", return_value=doc_result):
-                    with patch("index_builder.pipeline.process_queries", return_value=query_result):
-                        with patch("pandas.DataFrame.to_parquet", return_value=None):
-                            run_builder(
-                                dataset_name="ds",
-                                output_dir=root / "out" / "ds" / "m",
-                                dataset_ctx=dataset_ctx,
-                                builder_cfg=builder_cfg,
-                                embedding_strategy=Mock(),
-                                logger=Mock(),
-                            )
+            with patch("embed_pipe.app.runner.ChunkSelector", return_value=Mock()):
+                with patch("embed_pipe.app.runner.DocumentService.process", return_value=doc_result):
+                    with patch("embed_pipe.app.runner.QueryService.process", return_value=query_result):
+                        with patch("embed_pipe.app.runner.OutputWriter.write_docs", return_value=None):
+                            with patch("embed_pipe.app.runner.OutputWriter.write_queries", return_value=None):
+                                runner = BuilderRunner(
+                                    dataset_name="ds",
+                                    output_dir=root / "out" / "ds" / "m",
+                                    dataset_ctx=dataset_ctx,
+                                    builder_cfg=builder_cfg,
+                                    embedding_strategy=Mock(),
+                                    logger=Mock(),
+                                )
+                                runner.run()
 
             output_dir = root / "out" / "ds" / "m"
             failures_path = output_dir / "failures.jsonl"
