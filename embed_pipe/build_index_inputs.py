@@ -13,21 +13,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Build index input artifacts for one model."
     )
-    parser.add_argument(
-        "--dataset-path", required=True, help="Path to datasets root directory."
-    )
-    parser.add_argument(
-        "--dataset-name", required=True, help="Sub-dataset directory name."
-    )
-    parser.add_argument(
-        "--model-name", required=True, help="Model name key in model_config.yaml."
-    )
-    parser.add_argument(
-        "--config-path", default="model_config.yaml", help="Path to model config YAML."
-    )
-    parser.add_argument(
-        "--output-root", default="output", help="Output root directory."
-    )
+    parser.add_argument("--dataset-path", required=True)
+    parser.add_argument("--dataset-name", required=True)
+    parser.add_argument("--model-name", required=True)
+    parser.add_argument("--config-path", default="model_config.yaml")
+    parser.add_argument("--output-root", default="output")
     args = parser.parse_args()
 
     output_dir = Path(args.output_root) / args.dataset_name / args.model_name
@@ -43,7 +33,6 @@ def main() -> int:
     )
     if not builder_cfg_result.ok:
         logger.error(
-            "event=builder_start_failed reason=%s context=%s",
             "Failed to load builder config",
             "config_path=%s model_name=%s" % (args.config_path, args.model_name),
         )
@@ -54,7 +43,6 @@ def main() -> int:
     )
     if not dataset_ctx_result.ok:
         logger.error(
-            "event=builder_start_failed reason=%s context=%s",
             "Failed to load dataset context",
             "dataset_path=%s dataset_name=%s" % (args.dataset_path, args.dataset_name),
         )
@@ -63,11 +51,7 @@ def main() -> int:
     builder_cfg = builder_cfg_result.value
     dataset_ctx = dataset_ctx_result.value
     if builder_cfg is None or dataset_ctx is None:
-        logger.error(
-            "event=builder_start_failed reason=%s context=%s",
-            "Missing required runtime objects",
-            "",
-        )
+        logger.error("Missing required runtime objects")
         return 1
 
     embedding_strategy_result = strategy_factory.build(
@@ -75,18 +59,13 @@ def main() -> int:
     )
     if not embedding_strategy_result.ok:
         logger.error(
-            "event=builder_start_failed reason=%s context=%s",
             "Failed to build embedding strategy",
             "model_name=%s" % args.model_name,
         )
         return 1
     embedding_strategy = embedding_strategy_result.value
     if embedding_strategy is None:
-        logger.error(
-            "event=builder_start_failed reason=%s context=%s",
-            "Embedding strategy is empty",
-            "",
-        )
+        logger.error("Embedding strategy is empty")
         return 1
 
     runner = BuilderRunner(

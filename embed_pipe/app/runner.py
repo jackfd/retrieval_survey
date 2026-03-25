@@ -86,20 +86,13 @@ class BuilderRunner:
             doc_failures_count=len(doc_value.failures),
             query_failures_count=len(query_value.failures),
         )
-        try:
-            self.output_writer.write_all_outputs(
-                docs_df=merged_docs_df,
-                queries_df=query_value.output_df,
-                failures=all_failures,
-                metadata=metadata,
-            )
-        except Exception as exc:
-            self.logger.error(
-                "event=write_outputs_failed reason=%s context=%s",
-                exc,
-                "output_dir=%s" % self.output_writer.output_dir,
-            )
-            return Result.failure()
+
+        self.output_writer.write_all_outputs(
+            docs_df=merged_docs_df,
+            queries_df=query_value.output_df,
+            failures=all_failures,
+            metadata=metadata,
+        )
 
         self.logger.info(
             "end: attempted_doc_count=%s attempted_query_count=%s doc_count=%s query_count=%s "
@@ -127,9 +120,7 @@ def build_run_metadata(
     doc_failures_count: int,
     query_failures_count: int,
 ) -> Dict[str, Any]:
-    runtime = builder_cfg.runtime
     model = builder_cfg.model
-    dataset_meta = dataset_ctx.dataset_meta
     run_end = utc_now_iso()
     return {
         "run": {
@@ -138,29 +129,10 @@ def build_run_metadata(
             "retry_mode": retry_mode,
             "resolved_dataset_dir": str(dataset_ctx.resolved_dataset_dir),
         },
-        "dataset_metadata": {
-            "dataset_name": dataset_meta.get("dataset_name", ""),
-            "version": dataset_meta.get("version", ""),
-            "subset": dataset_meta.get("subset", ""),
-            "task": dataset_meta.get("task", ""),
-            "domain": (dataset_meta.get("metadata") or {}).get("domain", ""),
-            "language": (dataset_meta.get("metadata") or {}).get("language", ""),
-        },
         "model": {
             "model_name": model.model_name,
             "provider": model.provider,
             "model_id": model.model_id,
-        },
-        "runtime_config": {
-            "embedding_dim": runtime.embedding_dim,
-            "normalize_embeddings": runtime.normalize_embeddings,
-            "max_length": runtime.max_length,
-            "query_prefix": runtime.query_prefix,
-            "doc_prefix": runtime.doc_prefix,
-            "instruction_template": runtime.instruction_template,
-            "batch_size": runtime.batch_size,
-            "device": runtime.device,
-            "embedding_api_url": runtime.embedding_api_url,
         },
         "stats": {
             "attempted_doc_count": attempted_docs,

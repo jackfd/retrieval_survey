@@ -31,33 +31,16 @@ class DocumentService:
             doc_id = str(obj.get("doc_id", "")).strip()
             doc_text = str(obj.get("doc_text", "")).strip()
             if not doc_id or not doc_text:
-                message = (
+                self.logger.error(
                     "Invalid docs input at line %s in %s: doc_id/doc_text must be non-empty (doc_id=%r)"
                     % (line_num, docs_path, doc_id)
-                )
-                self.logger.error(
-                    "event=docs_validation_failed reason=%s context=%s",
-                    message,
-                    "docs_path=%s line_num=%s" % (docs_path, line_num),
                 )
                 return Result.failure()
             if retry_mode and doc_id not in retry_id_set:
                 continue
 
             attempted_count += 1
-            try:
-                selected = self.selector.select_chunks(doc_text, "")
-            except Exception as exc:
-                failures.append(
-                    FailureRecord(
-                        record_type="doc",
-                        record_id=doc_id,
-                        error_message=str(exc),
-                        stage="chunk_selection",
-                    ).to_dict()
-                )
-                continue
-
+            selected = self.selector.select_chunks(doc_text, "")
             if not selected:
                 failures.append(
                     FailureRecord(

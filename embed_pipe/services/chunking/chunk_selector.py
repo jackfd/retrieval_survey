@@ -4,7 +4,10 @@ from typing import Dict, List
 
 import numpy as np
 
-from embed_pipe.infra.embedding_strategies import BaseEmbeddingStrategy, ensure_embedding_shape
+from embed_pipe.infra.embedding_strategies import (
+    BaseEmbeddingStrategy,
+    ensure_embedding_shape,
+)
 from .chunk_clusterer import ChunkClusterer
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter
@@ -26,7 +29,9 @@ class ChunkSelector:
 
         cluster_num = max(1, int(self.chunk_num * self.config.cluster_ratio))
 
-        self.text_processor = text_processor or ChunkSplitter(min_sentences=3, max_tokens=8092)
+        self.text_processor = text_processor or ChunkSplitter(
+            min_sentences=3, max_tokens=8092
+        )
         self.stop_words = StopwordsLoader.load_stopwords()
 
         self.clusterer = ChunkClusterer(cluster_num=cluster_num)
@@ -47,7 +52,9 @@ class ChunkSelector:
     def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
         return self.clusterer.cluster_chunks(embeddings)
 
-    def compute_scores(self, chunks: List[str], candidate_idxs: List[int], title: str = "") -> np.ndarray:
+    def compute_scores(
+        self, chunks: List[str], candidate_idxs: List[int], title: str = ""
+    ) -> np.ndarray:
         return self.scorer.compute_scores(chunks, candidate_idxs, title=title)
 
     def select_chunks(self, text: str, title: str) -> List[Dict]:
@@ -55,7 +62,6 @@ class ChunkSelector:
         chunks = self.text_processor.split_paragraphs(text)
         if not chunks:
             logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
                 "No valid paragraphs after text splitting",
                 "text_length=%s" % (len(text) if isinstance(text, str) else 0),
             )
@@ -63,14 +69,8 @@ class ChunkSelector:
 
         try:
             self.compute_global_statistics(chunks)
-        except ValueError as exc:
+        except ValueError:
             logger.error(
-                "event=chunk_statistics_failed reason=%s context=%s",
-                exc,
-                "chunk_count=%s" % len(chunks),
-            )
-            logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
                 "Global statistics computation failed",
                 "chunk_count=%s" % len(chunks),
             )
@@ -78,14 +78,8 @@ class ChunkSelector:
 
         try:
             embeddings = self.get_embeddings(chunks)
-        except Exception as exc:
+        except Exception:
             logger.error(
-                "event=embedding_retrieval_failed reason=%s context=%s",
-                exc,
-                "chunk_count=%s" % len(chunks),
-            )
-            logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
                 "Embedding retrieval failed",
                 "chunk_count=%s" % len(chunks),
             )
@@ -93,7 +87,6 @@ class ChunkSelector:
 
         if embeddings.size == 0:
             logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
                 "Embeddings are empty",
                 "chunk_count=%s" % len(chunks),
             )
