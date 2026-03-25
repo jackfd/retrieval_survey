@@ -1,0 +1,29 @@
+embedding_dim: 768
+normalize_embeddings: true
+max_length: 512
+query_prefix: ""
+doc_prefix: ""
+instruction_template: ""
+batch_size: 64
+device: "cuda"
+embedding_mode: "local"
+embedding_api_url: ""
+http_timeout: 30.0
+http_max_retries: 2
+
+models:
+  granite-embedding-english-r2:
+    provider: sentence_transformers
+    model_id: granite-embedding-english-r2
+  gte-multilingual-base:
+    provider: sentence_transformers
+    model_id: gte-multilingual-base
+  Qwen3-Embedding-0.6B:
+    provider: sentence_transformers
+    model_id: Qwen3-Embedding-0.6B
+  jina-embeddings-v5-text-small-retrieval:
+    provider: sentence_transformers
+    model_id: jina-embeddings-v5-text-small-retrieval
+  bge-m3:
+    provider: flag_embedding
+    model_id: bge-m3

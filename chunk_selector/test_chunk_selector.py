@@ -66,6 +66,20 @@ class TestChunkSelector(unittest.TestCase):
         results = self.selector.select_chunks(text, "")
         self.assertEqual(results, [])
 
+    def test_embedding_provider_injection(self):
+        def provider(chunks):
+            return np.ones((len(chunks), 8), dtype=float)
+
+        selector = ChunkSelector(
+            embedding_api_url="http://unused",
+            chunk_num=1,
+            config=SelectorConfig(cluster_ratio=1.0),
+            embedding_provider=provider,
+        )
+        results = selector.select_chunks("第一段内容足够长。第二句。第三句。", "")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(results[0]["embedding"]), 8)
+
 
 if __name__ == "__main__":
     unittest.main()

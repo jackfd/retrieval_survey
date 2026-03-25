@@ -32,6 +32,7 @@ Validation rules:
 4. Resolved `dataset.json` MUST provide usable `docs_file` and `splits.train.queries_file`.
 5. Resolved docs and queries files MUST exist before embedding starts.
 6. If `embedding_dim` is configured as `768`, all output vectors MUST have exactly 768 dimensions.
+7. Embedding strategy selection MUST come from `model_config.yaml` only (no CLI strategy override).
 
 ### 2.2 `index_scheduler.py`
 
@@ -48,6 +49,21 @@ Scheduling rules:
 1. Default mode SHALL execute all configured models in deterministic order.
 2. Single-model mode SHALL execute only the specified model.
 3. One model failure MUST NOT terminate remaining model runs.
+
+### 2.4 Embedding Strategy Conventions
+
+`model_config.yaml` MUST define global strategy keys:
+
+- `embedding_mode`: `local` or `http` (default `local`)
+- `embedding_api_url`: required only when `embedding_mode=http`
+
+Behavioral rules:
+
+1. In `local` mode, implementation MUST call local model encoders directly.
+2. In `http` mode, implementation MUST call `embedding_api_url` and use payload contract:
+   - request: `{"chunks":[...]}`
+   - response: `{"vectors":[...]}`
+3. Strategy and URL MUST be sourced from YAML only.
 
 ### 2.3 Dataset Root Conventions
 
@@ -181,7 +197,10 @@ Minimum required fields:
 2. **Train-only queries**: query embeddings MUST be generated from `train/queries.jsonl` only.
 3. **Strict 768 dimensions**: implementation MUST fail the affected item when vector dimension is not 768.
    - Padding or truncation fallback is prohibited.
-4. **Incremental retry**:
+4. **Embedding strategy**:
+   - `local` mode MUST use direct local encoding.
+   - `http` mode MUST use `embedding_api_url`.
+5. **Incremental retry**:
    - If `failures.jsonl` exists from a previous run, implementation MUST process only failed docs.
    - Successful retries MUST be merged into existing `docs.parquet` by `doc_id` overwrite semantics.
    - Query embeddings MAY be regenerated in full for consistency.

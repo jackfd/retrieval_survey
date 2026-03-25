@@ -41,31 +41,19 @@ CLI interface (must match contract):
 - `--config-path` (optional, default `model_config.yaml`)
 - `--output-root` (optional, default `output`)
 
-## 3.2 `build_index_inputs.py`
+## 3.2 `build_index_inputs.py` (thin entry)
 
 Responsibilities:
 
 1. Parse builder CLI.
-2. Resolve sub-dataset directory under `--dataset-path` using contract rules:
-   - exact match first
-   - then unique case-insensitive match
-   - ambiguous case-insensitive match is an error
-3. Validate dataset files from resolved sub-dataset `dataset.json`:
-   - docs: `docs_file`
-   - queries: `splits.train.queries_file`
-4. Load model runtime config and selected model provider.
-5. Process docs:
-   - split and score chunks via ChunkSelector stack
-   - select Top1 chunk
-   - produce one record per `doc_id`
-6. Process queries:
-   - batch embedding from train split only
-7. Write artifacts:
-   - `docs.parquet`
-   - `queries.parquet`
-   - `failures.jsonl`
-   - `run_metadata.json`
-   - `app.log`
+2. Delegate execution to `index_builder` package modules.
+
+`index_builder` module split:
+
+- `config.py`: load/validate YAML, build runtime/model config
+- `dataset.py`: resolve sub-dataset directory and dataset paths
+- `embedding.py`: strategy mode (`local` / `http`)
+- `pipeline.py`: doc/query processing, retry merge, parquet/metadata/logging
 
 CLI interface (must match contract):
 
@@ -84,9 +72,9 @@ CLI interface (must match contract):
 3. Builder initializes logging in model output directory.
 4. Builder resolves target sub-dataset directory under `datasets/` root.
 5. Builder loads dataset metadata and runtime config.
-6. Builder loads embedding backend:
-   - Sentence Transformers for four models
-   - FlagEmbedding for `bge-m3`
+6. Builder selects embedding strategy from YAML:
+   - `local`: direct local model encoding
+   - `http`: request `embedding_api_url`
 7. Builder runs doc pipeline:
    - read docs JSONL
    - run chunk selection
@@ -172,6 +160,15 @@ Input files are loaded from:
 2. Per-failure entry with exception class and message
 3. End summary: doc_count/query_count/failure_count and duration
 
+## 6.3 Embedding Strategy Rules
+
+1. Strategy source is `model_config.yaml` only.
+2. `embedding_mode=local` is default.
+3. `embedding_mode=http` requires non-empty `embedding_api_url`.
+4. HTTP payload contract:
+   - request `{"chunks":[...]}`
+   - response `{"vectors":[...]}`
+
 ## 7. Stage Gates and Exit Criteria
 
 ## 7.1 Design Gate
@@ -253,7 +250,8 @@ Each gate must have:
 | Top1 doc chunk only | Contract Sec. 4.1 | schema checks + doc-level uniqueness tests |
 | Train-only query embedding | Contract Sec. 4.2 | split-path assertion tests |
 | 768 strict vector dim | Contract Sec. 2/4.3 | runtime dim assertions + failure-path tests |
-| Failed-doc incremental retry | Contract Sec. 4.4 | retry-flow integration test |
+| Local/HTTP strategy by YAML only | Contract Sec. 2.4/4.4 | config-driven strategy tests |
+| Failed-doc incremental retry | Contract Sec. 4.5 | retry-flow integration test |
 | Case-insensitive dataset resolution with ambiguity handling | Contract Sec. 2.1/2.3 | dataset resolution unit tests |
 | Model output log path and exception detail | Contract Sec. 5 | log inspection tests |
 
