@@ -6,10 +6,12 @@ import numpy as np
 import pandas as pd
 
 from index_builder.config import RuntimeConfig
-from chunk_selector.chunk_selector import ChunkSelector
-from chunk_selector.selector_config import SelectorConfig
 from index_builder.embedding import EmbeddingStrategy, ensure_embedding_shape
-from index_builder.errors import ChunkSelectionError, EmbeddingGenerationError
+from index_builder.errors import (
+    ChunkSelectionError,
+    EmbeddingGenerationError,
+    InputValidationError,
+)
 from index_builder.io_utils import read_jsonl, utc_now_iso
 
 
@@ -18,7 +20,6 @@ class ProcessResult:
     output_df: pd.DataFrame
     failures: List[Dict[str, str]]
     attempted_count: int
-    skipped_missing_required_count: int
 
 
 def _build_failure_record(
@@ -39,18 +40,6 @@ def _build_failure_record(
     }
 
 
-def build_chunk_selector(runtime: RuntimeConfig, embedding_strategy: EmbeddingStrategy):
-    return ChunkSelector(
-        embedding_api_url=runtime.embedding_api_url or "http://unused.local",
-        chunk_num=1,
-        config=SelectorConfig(batch_size=runtime.batch_size),
-        embedding_provider=lambda chunks: ensure_embedding_shape(
-            embedding_strategy.encode(chunks, is_query=False),
-            runtime.embedding_dim,
-        ),
-    )
-
-
 def process_docs(
     *,
     docs_path: Path,
@@ -58,7 +47,6 @@ def process_docs(
     runtime: RuntimeConfig,
     retry_mode: bool,
     retry_id_set: set[str],
-    logger,
 ) -> ProcessResult:
     """处理文档并将它们转换为嵌入向量格式
 
@@ -70,8 +58,7 @@ def process_docs(
         selector: 用于选择文档块的对象，具有select_chunks方法
         runtime: 运行时配置对象，包含嵌入维度等信息
         retry_mode: 是否为重试模式，如果是则只处理retry_id_set中的文档
-        retry_id_set: 重试模式下需要处理的文档ID集合
-        logger: 用于记录错误和日志消息的日志记录器
+    retry_id_set: 重试模式下需要处理的文档ID集合
 
     Returns:
         ProcessResult: 包含处理后的文档DataFrame、失败记录列表和统计信息
@@ -79,32 +66,14 @@ def process_docs(
     doc_records: List[Dict[str, Any]] = []
     failures: List[Dict[str, str]] = []
     attempted_count = 0
-    skipped_missing_required_count = 0
-    missing_warning_limit = 5
-    missing_warning_count = 0
-
-    for _, obj in read_jsonl(docs_path):
+    for line_num, obj in read_jsonl(docs_path):
         doc_id = str(obj.get("doc_id", "")).strip()
         doc_text = str(obj.get("doc_text", "")).strip()
         if not doc_id or not doc_text:
-            skipped_missing_required_count += 1
-            failures.append(
-                _build_failure_record(
-                    record_type="doc",
-                    record_id=doc_id,
-                    error_type="MissingRequiredField",
-                    error_message="doc_id or doc_text is empty",
-                    stage="input_validation",
-                )
+            raise InputValidationError(
+                "Invalid docs input at line %s in %s: doc_id/doc_text must be non-empty (doc_id=%r)"
+                % (line_num, docs_path, doc_id)
             )
-            if missing_warning_count < missing_warning_limit:
-                logger.warning(
-                    "doc_missing_required_fields doc_id=%s has_doc_text=%s",
-                    doc_id,
-                    bool(doc_text),
-                )
-                missing_warning_count += 1
-            continue
         if retry_mode and doc_id not in retry_id_set:
             continue
 
@@ -143,13 +112,6 @@ def process_docs(
                 )
             )
 
-    if skipped_missing_required_count > missing_warning_limit:
-        logger.warning(
-            "doc_missing_required_fields_suppressed suppressed_count=%s total_missing=%s",
-            skipped_missing_required_count - missing_warning_limit,
-            skipped_missing_required_count,
-        )
-
     docs_df = pd.DataFrame(
         doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
     )
@@ -157,7 +119,6 @@ def process_docs(
         output_df=docs_df,
         failures=failures,
         attempted_count=attempted_count,
-        skipped_missing_required_count=skipped_missing_required_count,
     )
 
 
@@ -166,38 +127,20 @@ def process_queries(
     queries_path: Path,
     embedding_strategy: EmbeddingStrategy,
     runtime: RuntimeConfig,
-    logger,
 ) -> ProcessResult:
     query_ids: List[str] = []
     query_texts: List[str] = []
     query_records: List[Dict[str, Any]] = []
     failures: List[Dict[str, str]] = []
     attempted_count = 0
-    skipped_missing_required_count = 0
-    missing_warning_limit = 5
-    missing_warning_count = 0
-    for _, obj in read_jsonl(queries_path):
+    for line_num, obj in read_jsonl(queries_path):
         qid = str(obj.get("query_id", "")).strip()
         qtext = str(obj.get("query_text", "")).strip()
         if not qid or not qtext:
-            skipped_missing_required_count += 1
-            failures.append(
-                _build_failure_record(
-                    record_type="query",
-                    record_id=qid,
-                    error_type="MissingRequiredField",
-                    error_message="query_id or query_text is empty",
-                    stage="input_validation",
-                )
+            raise InputValidationError(
+                "Invalid queries input at line %s in %s: query_id/query_text must be non-empty (query_id=%r)"
+                % (line_num, queries_path, qid)
             )
-            if missing_warning_count < missing_warning_limit:
-                logger.warning(
-                    "query_missing_required_fields query_id=%s has_query_text=%s",
-                    qid,
-                    bool(qtext),
-                )
-                missing_warning_count += 1
-            continue
 
         query_ids.append(qid)
         query_texts.append(qtext)
@@ -226,13 +169,6 @@ def process_queries(
                 )
             )
 
-    if skipped_missing_required_count > missing_warning_limit:
-        logger.warning(
-            "query_missing_required_fields_suppressed suppressed_count=%s total_missing=%s",
-            skipped_missing_required_count - missing_warning_limit,
-            skipped_missing_required_count,
-        )
-
     query_df = pd.DataFrame(
         query_records, columns=["query_id", "query_text", "query_embedding"]
     )
@@ -240,5 +176,4 @@ def process_queries(
         output_df=query_df,
         failures=failures,
         attempted_count=attempted_count,
-        skipped_missing_required_count=skipped_missing_required_count,
     )

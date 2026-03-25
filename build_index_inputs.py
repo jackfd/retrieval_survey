@@ -31,6 +31,7 @@ def main() -> None:
 
     # Initialize logger early so source-layer validation/model-load errors are persisted.
     output_dir = Path(args.output_root) / args.dataset_name / args.model_name
+    output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
     builder_cfg = load_builder_config(
@@ -45,7 +46,7 @@ def main() -> None:
 
     run_builder(
         dataset_name=args.dataset_name,
-        output_root=Path(args.output_root),
+        output_dir=output_dir,
         dataset_ctx=dataset_ctx,
         builder_cfg=builder_cfg,
         embedding_strategy=embedding_strategy,

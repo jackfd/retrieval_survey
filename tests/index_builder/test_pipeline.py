@@ -63,7 +63,6 @@ class TestPipeline(unittest.TestCase):
                     }
                 ],
                 attempted_count=1,
-                skipped_missing_required_count=2,
             )
             query_result = ProcessResult(
                 output_df=pd.DataFrame(
@@ -80,19 +79,19 @@ class TestPipeline(unittest.TestCase):
                     }
                 ],
                 attempted_count=1,
-                skipped_missing_required_count=1,
             )
 
-            with patch("index_builder.pipeline.build_chunk_selector", return_value=Mock()):
+            with patch("index_builder.pipeline.ChunkSelector", return_value=Mock()):
                 with patch("index_builder.pipeline.process_docs", return_value=doc_result):
                     with patch("index_builder.pipeline.process_queries", return_value=query_result):
                         with patch("pandas.DataFrame.to_parquet", return_value=None):
                             run_builder(
                                 dataset_name="ds",
-                                output_root=root / "out",
+                                output_dir=root / "out" / "ds" / "m",
                                 dataset_ctx=dataset_ctx,
                                 builder_cfg=builder_cfg,
                                 embedding_strategy=Mock(),
+                                logger=Mock(),
                             )
 
             output_dir = root / "out" / "ds" / "m"
@@ -114,8 +113,6 @@ class TestPipeline(unittest.TestCase):
             self.assertEqual(stats["doc_failure_count"], 1)
             self.assertEqual(stats["query_failure_count"], 1)
             self.assertEqual(stats["failure_count"], 2)
-            self.assertEqual(stats["skipped_missing_required_doc_count"], 2)
-            self.assertEqual(stats["skipped_missing_required_query_count"], 1)
 
 
 if __name__ == "__main__":

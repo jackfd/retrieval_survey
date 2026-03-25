@@ -19,8 +19,6 @@ def build_run_metadata(
     attempted_queries: int,
     doc_failures_count: int,
     query_failures_count: int,
-    skipped_missing_required_docs: int,
-    skipped_missing_required_queries: int,
 ) -> Dict[str, Any]:
     runtime = builder_cfg.runtime
     model = builder_cfg.model
@@ -64,7 +62,5 @@ def build_run_metadata(
             "doc_failure_count": int(doc_failures_count),
             "query_failure_count": int(query_failures_count),
             "failure_count": int(doc_failures_count + query_failures_count),
-            "skipped_missing_required_doc_count": int(skipped_missing_required_docs),
-            "skipped_missing_required_query_count": int(skipped_missing_required_queries),
         },
     }

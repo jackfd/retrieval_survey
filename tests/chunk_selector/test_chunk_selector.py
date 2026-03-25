@@ -2,16 +2,43 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-import requests
 
 from chunk_selector import ChunkSelector, SelectorConfig
+from index_builder.config import RuntimeConfig
+from index_builder.embedding import BaseEmbeddingStrategy, EmbeddingGenerationError
+
+
+class _DummyEmbeddingStrategy(BaseEmbeddingStrategy):
+    def __init__(self, dim: int = 8):
+        runtime = RuntimeConfig(
+            embedding_dim=dim,
+            normalize_embeddings=False,
+            max_length=128,
+            query_prefix="",
+            doc_prefix="",
+            instruction_template="",
+            batch_size=8,
+            device="cpu",
+            embedding_api_url="",
+            http_timeout=1.0,
+            http_max_retries=0,
+        )
+        super().__init__(runtime)
+        self.dim = dim
+        self.fail = False
+
+    def encode(self, texts, is_query):
+        if self.fail:
+            raise EmbeddingGenerationError("mock encode failed")
+        return np.ones((len(texts), self.dim), dtype=np.float32)
 
 
 class TestChunkSelector(unittest.TestCase):
     def setUp(self):
-        config = SelectorConfig(cluster_ratio=1.0, max_retries=0, request_timeout=0.5)
+        config = SelectorConfig(cluster_ratio=1.0)
+        self.embedding_strategy = _DummyEmbeddingStrategy(dim=8)
         self.selector = ChunkSelector(
-            embedding_api_url="http://mock-api",
+            embedding_strategy=self.embedding_strategy,
             chunk_num=3,
             config=config,
         )
@@ -32,16 +59,19 @@ class TestChunkSelector(unittest.TestCase):
         self.assertIsInstance(results, list)
         self.assertEqual(len(results), min(self.selector.chunk_num, len(chunks)))
         for item in results:
-            self.assertIn("chunk", item)
             self.assertIn("chunk_text", item)
             self.assertIn("score", item)
             self.assertIn("embedding", item)
-            self.assertIsInstance(item["chunk"], str)
+            self.assertIsInstance(item["chunk_text"], str)
             self.assertIsInstance(item["score"], float)
 
     @patch.object(ChunkSelector, "get_embeddings")
     def test_candidate_less_than_chunk_num(self, mock_get_embeddings):
-        selector = ChunkSelector("http://mock-api", chunk_num=5, config=SelectorConfig(cluster_ratio=1.0))
+        selector = ChunkSelector(
+            embedding_strategy=_DummyEmbeddingStrategy(dim=6),
+            chunk_num=5,
+            config=SelectorConfig(cluster_ratio=1.0),
+        )
         text = "只有一段。"
         chunks = selector.split_paragraphs(text)
         mock_get_embeddings.return_value = np.random.rand(len(chunks), 6)
@@ -55,7 +85,7 @@ class TestChunkSelector(unittest.TestCase):
 
     @patch.object(ChunkSelector, "get_embeddings")
     def test_embedding_failure_returns_empty(self, mock_get_embeddings):
-        mock_get_embeddings.side_effect = requests.exceptions.RequestException("timeout")
+        mock_get_embeddings.side_effect = EmbeddingGenerationError("timeout")
         results = self.selector.select_chunks(self.text, "标题")
         self.assertEqual(results, [])
 
@@ -66,15 +96,11 @@ class TestChunkSelector(unittest.TestCase):
         results = self.selector.select_chunks(text, "")
         self.assertEqual(results, [])
 
-    def test_embedding_provider_injection(self):
-        def provider(chunks):
-            return np.ones((len(chunks), 8), dtype=float)
-
+    def test_embedding_strategy_injection(self):
         selector = ChunkSelector(
-            embedding_api_url="http://unused",
+            embedding_strategy=_DummyEmbeddingStrategy(dim=8),
             chunk_num=1,
             config=SelectorConfig(cluster_ratio=1.0),
-            embedding_provider=provider,
         )
         results = selector.select_chunks("第一段内容足够长。第二句。第三句。", "")
         self.assertEqual(len(results), 1)

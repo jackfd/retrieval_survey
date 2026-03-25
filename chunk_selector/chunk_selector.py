@@ -1,33 +1,31 @@
 # -*- coding: utf-8 -*-
 import logging
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 import numpy as np
-import requests
 
+from index_builder.embedding import BaseEmbeddingStrategy, ensure_embedding_shape
 from .chunk_clusterer import ChunkClusterer
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter
-from .embedding_client import EmbeddingClient
 from .selector_config import SelectorConfig
 from .stopwords_loader import StopwordsLoader
 
 
 class ChunkSelector:
     """
-    文本块选择器：编排 Splitter / EmbeddingClient / Scorer / Clusterer。
+    文本块选择器：编排 Splitter / EmbeddingStrategy / Scorer / Clusterer。
     对外保持原有方法兼容。
     """
 
     def __init__(
         self,
-        embedding_api_url: str,
+        embedding_strategy: BaseEmbeddingStrategy,
         chunk_num: int = 5,
         config: SelectorConfig | None = None,
         text_processor: ChunkSplitter | None = None,
-        embedding_provider: Callable[[List[str]], np.ndarray] | None = None,
     ):
-        self.embedding_api_url = embedding_api_url
+        self.embedding_strategy = embedding_strategy
         self.chunk_num = max(1, int(chunk_num))
         self.config = config or SelectorConfig()
 
@@ -38,12 +36,6 @@ class ChunkSelector:
         )
         self.stop_words = StopwordsLoader.load_stopwords()
 
-        self.embedding_provider = embedding_provider
-        self.embedding_client = None
-        if self.embedding_provider is None:
-            self.embedding_client = EmbeddingClient(
-                embedding_api_url=self.embedding_api_url, config=self.config
-            )
         self.clusterer = ChunkClusterer(cluster_num=cluster_num)
         self.scorer = ChunkScorer(stop_words=self.stop_words, config=self.config)
 
@@ -54,12 +46,10 @@ class ChunkSelector:
         self.scorer.compute_global_statistics(chunks)
 
     def get_embeddings(self, chunks: List[str]) -> np.ndarray:
-        if self.embedding_provider is not None:
-            vectors = self.embedding_provider(chunks)
-            return np.asarray(vectors, dtype=float)
-        if self.embedding_client is None:
-            return np.empty((0, 0), dtype=float)
-        return self.embedding_client.get_embeddings(chunks)
+        vectors = self.embedding_strategy.encode(chunks, is_query=False)
+        output = np.asarray(vectors, dtype=np.float32)
+        expected_dim = int(self.embedding_strategy.runtime.embedding_dim)
+        return ensure_embedding_shape(output, expected_dim)
 
     def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
         return self.clusterer.cluster_chunks(embeddings)
@@ -97,7 +87,7 @@ class ChunkSelector:
 
         try:
             embeddings = self.get_embeddings(chunks)
-        except (requests.exceptions.RequestException, Exception) as exc:
+        except Exception as exc:
             logger.error(
                 "event=embedding_retrieval_failed reason=%s context=%s",
                 exc,

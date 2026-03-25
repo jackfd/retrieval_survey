@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from chunk_selector.chunk_selector import ChunkSelector
+from chunk_selector.selector_config import SelectorConfig
 from index_builder.config import BuilderConfig
 from index_builder.dataset import DatasetContext
 from index_builder.embedding import EmbeddingStrategy
@@ -8,18 +10,17 @@ from index_builder.io_utils import (
     load_existing_docs_parquet,
     load_failures,
     merge_docs_with_retry,
-    setup_logger,
     utc_now_iso,
     write_failures,
 )
 from index_builder.metadata import build_run_metadata
-from index_builder.processors import build_chunk_selector, process_docs, process_queries
+from index_builder.processors import process_docs, process_queries
 
 
 def run_builder(
     *,
     dataset_name: str,
-    output_root: Path,
+    output_dir: Path,
     dataset_ctx: DatasetContext,
     builder_cfg: BuilderConfig,
     embedding_strategy: EmbeddingStrategy,
@@ -30,29 +31,26 @@ def run_builder(
 
     参数:
         dataset_name: 数据集名称
-        output_root: 输出根目录路径
+        output_dir: 输出根目录路径
         dataset_ctx: 数据集上下文对象，包含数据集相关信息
         builder_cfg: 构建器配置对象
         embedding_strategy: 嵌入策略对象
     返回:
         None
     """
-    # 初始化运行环境和日志记录器
+    # 初始化运行上下文
     runtime = builder_cfg.runtime
     model = builder_cfg.model
-    resolved_mode = "http" if runtime.embedding_api_url.strip() else "local"
-    output_dir = output_root / dataset_name / model.model_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 记录运行开始信息
     run_start = utc_now_iso()
     logger.info(
-        "run_start dataset_root=%s resolved_dataset_dir=%s dataset_name=%s model_name=%s resolved_mode=%s",
+        "run_start dataset_root=%s resolved_dataset_dir=%s dataset_name=%s model_name=%s",
         dataset_ctx.dataset_root,
         dataset_ctx.resolved_dataset_dir,
         dataset_name,
         model.model_name,
-        resolved_mode,
     )
 
     # 定义输出文件路径
@@ -67,8 +65,10 @@ def run_builder(
     retry_id_set = set(previous_failed_ids)
 
     # 处理文档数据
-    selector = build_chunk_selector(
-        runtime=runtime, embedding_strategy=embedding_strategy
+    selector = ChunkSelector(
+        embedding_strategy=embedding_strategy,
+        chunk_num=1,
+        config=SelectorConfig(batch_size=runtime.batch_size),
     )
     doc_result = process_docs(
         docs_path=dataset_ctx.docs_path,
@@ -76,7 +76,6 @@ def run_builder(
         runtime=runtime,
         retry_mode=retry_mode,
         retry_id_set=retry_id_set,
-        logger=logger,
     )
 
     # 合并新处理的文档与已存在的文档，并保存到parquet文件
@@ -94,7 +93,6 @@ def run_builder(
         queries_path=dataset_ctx.queries_path,
         embedding_strategy=embedding_strategy,
         runtime=runtime,
-        logger=logger,
     )
     query_result.output_df.to_parquet(queries_parquet_path, index=False)
 
@@ -116,8 +114,6 @@ def run_builder(
         attempted_queries=query_result.attempted_count,
         doc_failures_count=len(doc_result.failures),
         query_failures_count=len(query_result.failures),
-        skipped_missing_required_docs=doc_result.skipped_missing_required_count,
-        skipped_missing_required_queries=query_result.skipped_missing_required_count,
     )
     with metadata_path.open("w", encoding="utf-8") as fout:
         json.dump(metadata, fout, ensure_ascii=False, indent=2)
