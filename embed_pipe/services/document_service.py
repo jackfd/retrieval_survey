@@ -40,7 +40,7 @@ class DocumentService:
                     message,
                     "docs_path=%s line_num=%s" % (docs_path, line_num),
                 )
-                return Result.failure(message)
+                return Result.failure()
             if retry_mode and doc_id not in retry_id_set:
                 continue
 

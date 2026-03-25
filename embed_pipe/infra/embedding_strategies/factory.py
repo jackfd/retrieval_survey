@@ -11,5 +11,5 @@ class EmbeddingStrategyFactory:
             if runtime.embedding_api_url.strip():
                 return Result.success(HttpEmbeddingStrategy(runtime=runtime))
             return Result.success(LocalEmbeddingStrategy(runtime=runtime, model=model))
-        except Exception as exc:
-            return Result.failure(str(exc))
+        except Exception:
+            return Result.failure()

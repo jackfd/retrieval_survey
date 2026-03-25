@@ -17,7 +17,7 @@ class ConfigLoader:
                 "Missing config file",
                 "path=%s" % path,
             )
-            return Result.failure("Missing config file: %s" % path)
+            return Result.failure()
 
         with path.open("r", encoding="utf-8") as fin:
             cfg = yaml.safe_load(fin) or {}
@@ -27,14 +27,14 @@ class ConfigLoader:
                 "Config file must be a mapping",
                 "path=%s" % path,
             )
-            return Result.failure("Config file must be a mapping: %s" % path)
+            return Result.failure()
         return Result.success(cfg)
 
     def load_builder_config(self, config_path: Path, model_name: str) -> Result[BuilderConfig]:
         logger = logging.getLogger("embed_pipe")
         cfg_result = self.load_yaml(config_path)
         if not cfg_result.ok:
-            return Result.failure(cfg_result.error_message)
+            return Result.failure()
 
         cfg = cfg_result.value or {}
         models = cfg.get("models", {})
@@ -44,14 +44,14 @@ class ConfigLoader:
                 "Config key 'models' must be a mapping",
                 "config_path=%s" % config_path,
             )
-            return Result.failure("Config key 'models' must be a mapping")
+            return Result.failure()
         if model_name not in models:
             logger.error(
                 "event=config_validation_failed reason=%s context=%s",
                 "Unknown model_name in config",
                 "config_path=%s model_name=%s" % (config_path, model_name),
             )
-            return Result.failure("Unknown model_name=%r in config" % model_name)
+            return Result.failure()
 
         model_obj = models[model_name]
         if not isinstance(model_obj, dict):
@@ -60,7 +60,7 @@ class ConfigLoader:
                 "Model config must be a mapping",
                 "config_path=%s model_name=%s" % (config_path, model_name),
             )
-            return Result.failure("Model config must be a mapping: model_name=%r" % model_name)
+            return Result.failure()
 
         api_url = str(cfg.get("embedding_api_url", "")).strip()
         runtime = RuntimeConfig(
@@ -87,6 +87,6 @@ class ConfigLoader:
                 "Model config requires non-empty provider and model_id",
                 "config_path=%s model_name=%s" % (config_path, model_name),
             )
-            return Result.failure("Model config requires non-empty provider and model_id")
+            return Result.failure()
 
         return Result.success(BuilderConfig(runtime=runtime, model=model, raw_config=cfg))

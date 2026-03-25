@@ -47,12 +47,12 @@ class BuilderRunner:
             retry_id_set=retry_id_set,
         )
         if not doc_result.ok:
-            return Result.failure(doc_result.error_message or "document processing failed")
+            return Result.failure()
 
         doc_value = doc_result.value
         if doc_value is None:
             self.logger.error("Document service returned empty result")
-            return Result.failure("document service returned empty result")
+            return Result.failure()
 
         existing_docs_df = self.output_writer.load_existing_docs()
         merged_docs_df = self.output_writer.merge_docs_with_retry(
@@ -65,12 +65,12 @@ class BuilderRunner:
         query_service = QueryService(self.embedding_strategy, runtime)
         query_result = query_service.process(self.dataset_ctx.queries_path)
         if not query_result.ok:
-            return Result.failure(query_result.error_message or "query processing failed")
+            return Result.failure()
 
         query_value = query_result.value
         if query_value is None:
             self.logger.error("Query service returned empty result")
-            return Result.failure("query service returned empty result")
+            return Result.failure()
 
         all_failures = doc_value.failures + query_value.failures
 
@@ -99,7 +99,7 @@ class BuilderRunner:
                 exc,
                 "output_dir=%s" % self.output_writer.output_dir,
             )
-            return Result.failure(str(exc))
+            return Result.failure()
 
         self.logger.info(
             "end: attempted_doc_count=%s attempted_query_count=%s doc_count=%s query_count=%s "

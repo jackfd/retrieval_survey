@@ -82,8 +82,8 @@ class TestPipeline(unittest.TestCase):
                         with patch(
                             "embed_pipe.app.runner.OutputWriter.write_all_outputs", return_value=None
                         ) as mock_write_all:
-                            mock_doc_process.return_value = Mock(ok=True, value=doc_result, error_message="")
-                            mock_query_process.return_value = Mock(ok=True, value=query_result, error_message="")
+                            mock_doc_process.return_value = Mock(ok=True, value=doc_result)
+                            mock_query_process.return_value = Mock(ok=True, value=query_result)
                             runner = BuilderRunner(
                                 output_dir=root / "out" / "ds" / "m",
                                 dataset_ctx=dataset_ctx,
@@ -164,10 +164,10 @@ class TestPipeline(unittest.TestCase):
                             side_effect=RuntimeError("disk full"),
                         ):
                             mock_doc_process.return_value = Mock(
-                                ok=True, value=doc_result, error_message=""
+                                ok=True, value=doc_result
                             )
                             mock_query_process.return_value = Mock(
-                                ok=True, value=query_result, error_message=""
+                                ok=True, value=query_result
                             )
                             runner = BuilderRunner(
                                 output_dir=root / "out" / "ds" / "m",
@@ -177,7 +177,6 @@ class TestPipeline(unittest.TestCase):
                             )
                             result = runner.run()
                             self.assertFalse(result.ok)
-                            self.assertIn("disk full", result.error_message)
 
 
 if __name__ == "__main__":

@@ -63,7 +63,6 @@ class TestProcessors(unittest.TestCase):
             retry_id_set=set(),
         )
         self.assertFalse(result.ok)
-        self.assertIn("doc_id/doc_text must be non-empty", result.error_message)
 
     def test_process_docs_chunk_selection_failure_stage(self):
         docs_path = self._write_jsonl(['{"doc_id": "d1", "doc_text": "text"}'])

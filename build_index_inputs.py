@@ -44,7 +44,7 @@ def main() -> int:
     if not builder_cfg_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
-            builder_cfg_result.error_message,
+            "Failed to load builder config",
             "config_path=%s model_name=%s" % (args.config_path, args.model_name),
         )
         return 1
@@ -55,7 +55,7 @@ def main() -> int:
     if not dataset_ctx_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
-            dataset_ctx_result.error_message,
+            "Failed to load dataset context",
             "dataset_path=%s dataset_name=%s" % (args.dataset_path, args.dataset_name),
         )
         return 1
@@ -76,7 +76,7 @@ def main() -> int:
     if not embedding_strategy_result.ok:
         logger.error(
             "event=builder_start_failed reason=%s context=%s",
-            embedding_strategy_result.error_message,
+            "Failed to build embedding strategy",
             "model_name=%s" % args.model_name,
         )
         return 1

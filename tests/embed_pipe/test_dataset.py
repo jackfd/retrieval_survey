@@ -33,7 +33,6 @@ class TestDatasetResolution(unittest.TestCase):
                 self.skipTest("Case-insensitive filesystem does not allow ambiguous case-only dirs")
             resolved = DatasetLoader().resolve_subdataset_dir(root, "SCIFACT")
             self.assertFalse(resolved.ok)
-            self.assertIn("Ambiguous", resolved.error_message)
 
 
 if __name__ == "__main__":
