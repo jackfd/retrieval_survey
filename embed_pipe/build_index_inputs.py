@@ -8,44 +8,29 @@ from embed_pipe.infra.dataset_loader import DatasetLoader
 from embed_pipe.infra.embedding_strategies import EmbeddingStrategyFactory
 from embed_pipe.infra.logger import setup_logger
 
+output_root = "output"
+config_path = "model_config.yaml"
+dataset_path = "dataset"
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Build index input artifacts for one model."
-    )
-    parser.add_argument("--dataset-path", required=True)
-    parser.add_argument("--dataset-name", required=True)
-    parser.add_argument("--model-name", required=True)
-    parser.add_argument("--config-path", default="model_config.yaml")
-    parser.add_argument("--output-root", default="output")
-    args = parser.parse_args()
 
-    output_dir = Path(args.output_root) / args.dataset_name / args.model_name
+def run_once(dataset_path, dataset_name, model_name, config_loader):
+    output_dir = Path(output_root) / dataset_name / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
-    config_loader = ConfigLoader()
     dataset_loader = DatasetLoader()
     strategy_factory = EmbeddingStrategyFactory()
 
     builder_cfg_result = config_loader.load_builder_config(
-        Path(args.config_path), model_name=args.model_name
+        Path(config_path), model_name=model_name
     )
     if not builder_cfg_result.ok:
-        logger.error(
-            "Failed to load builder config",
-            "config_path=%s model_name=%s" % (args.config_path, args.model_name),
-        )
         return 1
 
     dataset_ctx_result = dataset_loader.load_dataset_context(
-        Path(args.dataset_path), dataset_name=args.dataset_name
+        Path(dataset_path), dataset_name=dataset_name
     )
     if not dataset_ctx_result.ok:
-        logger.error(
-            "Failed to load dataset context",
-            "dataset_path=%s dataset_name=%s" % (args.dataset_path, args.dataset_name),
-        )
         return 1
 
     builder_cfg = builder_cfg_result.value
@@ -60,7 +45,7 @@ def main() -> int:
     if not embedding_strategy_result.ok:
         logger.error(
             "Failed to build embedding strategy",
-            "model_name=%s" % args.model_name,
+            "model_name=%s" % model_name,
         )
         return 1
     embedding_strategy = embedding_strategy_result.value
@@ -75,16 +60,32 @@ def main() -> int:
         embedding_strategy=embedding_strategy,
     )
     logger.info(
-        "dataset_root=%s dataset_dir=%s dataset_name=%s model_name=%s",
+        "dataset_root=%s dataset_dir=%s  model_name=%s",
         dataset_ctx.dataset_root,
         dataset_ctx.resolved_dataset_dir,
-        args.dataset_name,
         builder_cfg.model,
     )
     run_result = runner.run()
     if not run_result.ok:
         return 1
 
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build index input artifacts")
+    parser.add_argument("--dataset-path", required=True)
+    args = parser.parse_args()
+
+    config_loader = ConfigLoader()
+    models = config_loader.load_models(Path(config_path))
+    data_sets = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
+
+    for m in models:
+        for dname in data_sets:
+            ret = run_once(args.dataset_path, dname, m, config_loader)
+            if ret != 0:
+                return ret
     return 0
 
 

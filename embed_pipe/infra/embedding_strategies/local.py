@@ -2,7 +2,8 @@ import logging
 from typing import Tuple
 
 import numpy as np
-
+from sentence_transformers import SentenceTransformer
+from FlagEmbedding import BGEM3FlagModel
 from embed_pipe.domain.models import ModelConfig, RuntimeConfig
 from embed_pipe.infra.embedding_strategies.base import BaseEmbeddingStrategy
 from embed_pipe.infra.embedding_strategies.shape import ensure_embedding_shape
@@ -17,35 +18,18 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
     def _build_local_encoder(self, model: ModelConfig) -> Tuple[str, object]:
         logger = logging.getLogger("embed_pipe")
         if model.provider == "sentence_transformers":
-            try:
-                from sentence_transformers import SentenceTransformer
-            except ImportError as exc:
-                logger.error(
-                    "event=model_load_failed reason=%s context=%s",
-                    exc,
-                    "provider=%s model_id=%s" % (model.provider, model.model_id),
-                )
-                raise RuntimeError("sentence-transformers is required for provider=sentence_transformers") from exc
             encoder = SentenceTransformer(model.model_id, device=self.runtime.device)
             if hasattr(encoder, "max_seq_length"):
                 encoder.max_seq_length = int(self.runtime.max_length)
             return ("sentence_transformers", encoder)
 
         if model.provider == "flag_embedding":
-            try:
-                from FlagEmbedding import BGEM3FlagModel
-            except ImportError as exc:
-                logger.error(
-                    "event=model_load_failed reason=%s context=%s",
-                    exc,
-                    "provider=%s model_id=%s" % (model.provider, model.model_id),
-                )
-                raise RuntimeError("FlagEmbedding is required for provider=flag_embedding") from exc
-            encoder = BGEM3FlagModel(model.model_id, use_fp16=str(self.runtime.device).startswith("cuda"))
+            encoder = BGEM3FlagModel(
+                model.model_id, use_fp16=str(self.runtime.device).startswith("cuda")
+            )
             return ("flag_embedding", encoder)
 
         logger.error(
-            "event=model_load_failed reason=%s context=%s",
             "Unsupported local provider",
             "provider=%s model_id=%s" % (model.provider, model.model_id),
         )

@@ -13,7 +13,6 @@ class ConfigLoader:
         logger = logging.getLogger("embed_pipe")
         if not path.exists():
             logger.error(
-                "event=config_validation_failed reason=%s context=%s",
                 "Missing config file",
                 "path=%s" % path,
             )
@@ -23,40 +22,36 @@ class ConfigLoader:
             cfg = yaml.safe_load(fin) or {}
         if not isinstance(cfg, dict):
             logger.error(
-                "event=config_validation_failed reason=%s context=%s",
                 "Config file must be a mapping",
                 "path=%s" % path,
             )
             return Result.failure()
         return Result.success(cfg)
 
-    def load_builder_config(self, config_path: Path, model_name: str) -> Result[BuilderConfig]:
+    def load_builder_config(
+        self, config_path: Path, model_name: str
+    ) -> Result[BuilderConfig]:
         logger = logging.getLogger("embed_pipe")
         cfg_result = self.load_yaml(config_path)
         if not cfg_result.ok:
+            logger.error(
+                "Failed to load config file",
+                "path=%s" % config_path,
+            )
             return Result.failure()
 
         cfg = cfg_result.value or {}
         models = cfg.get("models", {})
         if not isinstance(models, dict):
             logger.error(
-                "event=config_validation_failed reason=%s context=%s",
                 "Config key 'models' must be a mapping",
                 "config_path=%s" % config_path,
-            )
-            return Result.failure()
-        if model_name not in models:
-            logger.error(
-                "event=config_validation_failed reason=%s context=%s",
-                "Unknown model_name in config",
-                "config_path=%s model_name=%s" % (config_path, model_name),
             )
             return Result.failure()
 
         model_obj = models[model_name]
         if not isinstance(model_obj, dict):
             logger.error(
-                "event=config_validation_failed reason=%s context=%s",
                 "Model config must be a mapping",
                 "config_path=%s model_name=%s" % (config_path, model_name),
             )
@@ -83,10 +78,32 @@ class ConfigLoader:
         )
         if not model.provider or not model.model_id:
             logger.error(
-                "event=config_validation_failed reason=%s context=%s",
                 "Model config requires non-empty provider and model_id",
                 "config_path=%s model_name=%s" % (config_path, model_name),
             )
             return Result.failure()
 
-        return Result.success(BuilderConfig(runtime=runtime, model=model, raw_config=cfg))
+        return Result.success(
+            BuilderConfig(runtime=runtime, model=model, raw_config=cfg)
+        )
+
+    def load_models(self, config_path: Path):
+        logger = logging.getLogger("embed_pipe")
+        cfg_result = self.load_yaml(config_path)
+        if not cfg_result.ok:
+            logger.error(
+                "Failed to load config file",
+                "path=%s" % config_path,
+            )
+            return []
+
+        cfg = cfg_result.value or {}
+        models = cfg.get("models", {})
+        if not isinstance(models, dict):
+            logger.error(
+                "Config key 'models' must be a mapping",
+                "config_path=%s" % config_path,
+            )
+            return []
+
+        return list(models.keys())
