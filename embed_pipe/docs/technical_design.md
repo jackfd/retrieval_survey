@@ -2,110 +2,75 @@
 
 ## 1. Objective
 
-Define an implementation-ready architecture for generating OpenSearch-ready index input artifacts from benchmark datasets, under strict governance and contract control.
+Define an implementation-aligned architecture for generating index input artifacts from benchmark datasets.
 
-Pipeline scope:
+Current scope:
 
-- One run per dataset and model
-- Top1 chunk selection per document
-- Train-split query embeddings
-- Incremental failed-doc retry
-- Deterministic output artifact layout
+- Single CLI entry: `build_index_inputs.py --dataset-path`
+- Iterate all configured models from `model_config.yaml`
+- Iterate fixed dataset candidates: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
+- Run one `(dataset, model)` build at a time
+- Produce deterministic output layout under `output/<dataset_name>/<model_name>/`
 
 ## 2. Non-Negotiable Constraints
 
-1. All public interfaces MUST follow [contract.md](../contract.md).
+1. Public interfaces MUST follow [contract.md](../contract.md).
 2. Vector dimension MUST be exactly 768 for docs and queries.
-3. No implementation may start before Design Gate and Contract Gate are `PASS`.
-4. Output location is fixed: `output/<dataset_name>/<model_name>/`.
+3. Output location is fixed: `output/<dataset_name>/<model_name>/`.
+4. Any failed `(dataset, model)` combination MUST make process exit non-zero.
 
-## 3. Planned Modules and Responsibilities
+## 3. Modules and Responsibilities
 
-## 3.1 `index_scheduler.py`
-
-Responsibilities:
-
-1. Parse scheduler CLI.
-2. Load model registry from config.
-3. Resolve model execution list:
-   - if `--model-name` is provided, run single model
-   - otherwise run all configured models in deterministic order
-4. Invoke `build_index_inputs.py` once per model.
-5. Aggregate run status without early exit on single-model failure.
-
-CLI interface (must match contract):
-
-- `--dataset-path` (required)
-- `--dataset-name` (required)
-- `--model-name` (optional)
-- `--config-path` (optional, default `model_config.yaml`)
-- `--output-root` (optional, default `output`)
-
-## 3.2 `build_index_inputs.py` (thin entry)
+## 3.1 `build_index_inputs.py` (entry + orchestrator)
 
 Responsibilities:
 
-1. Parse builder CLI.
-2. Delegate execution to `index_builder` package modules.
+1. Parse CLI (`--dataset-path` only).
+2. Load model list via `ConfigLoader.load_models(model_config.yaml)`.
+3. Use fixed dataset candidates list.
+4. Execute nested loop:
+   - outer: model list order from YAML
+   - inner: fixed dataset order
+5. Call `run_once(dataset_path, dataset_name, model_name, config_loader)`.
+6. Stop and return non-zero immediately when one run fails.
 
-`index_builder` module split:
-
-- `config.py`: load/validate YAML, build runtime/model config
-- `dataset.py`: resolve sub-dataset directory and dataset paths
-- `embedding.py`: strategy mode (`local` / `http`)
-- `pipeline.py`: doc/query processing, retry merge, parquet/metadata/logging
-
-CLI interface (must match contract):
+CLI interface:
 
 - `--dataset-path` (required)
-- `--dataset-name` (required)
-- `--model-name` (required)
-- `--config-path` (optional, default `model_config.yaml`)
-- `--output-root` (optional, default `output`)
 
-## 4. Runtime Architecture and Sequence
+Internal fixed sources:
 
-## 4.1 End-to-End Sequence
+- config path: `model_config.yaml`
+- output root: `output`
+- datasets: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
 
-1. Scheduler resolves model list.
-2. For each model, scheduler launches builder.
-3. Builder initializes logging in model output directory.
-4. Builder resolves target sub-dataset directory under `datasets/` root.
-5. Builder loads dataset metadata and runtime config.
-6. Builder selects embedding strategy from YAML:
-   - empty `embedding_api_url`: direct local model encoding
-   - non-empty `embedding_api_url`: request HTTP embedding API
-7. Builder runs doc pipeline:
-   - read docs JSONL
-   - run chunk selection
-   - compute selected chunk embedding
-   - enforce vector length check (768)
-8. Builder runs query pipeline:
-   - read train queries JSONL
-   - embed in batches
-   - enforce vector length check (768)
-9. Builder writes parquet outputs and metadata.
-10. Builder writes failure list and final run summary logs.
+## 3.2 Supporting Components
 
-## 4.2 Incremental Retry Flow
+- `infra/config_loader.py`
+  - load YAML config
+  - build per-model runtime config
+  - return model key list for orchestration
+- `infra/dataset_loader.py`
+  - resolve sub-dataset directory by exact then case-insensitive unique match
+  - load dataset context and file paths from `dataset.json`
+- `infra/embedding_strategies/*`
+  - select local/http embedding strategy from YAML config
+- `app/runner.py`
+  - execute doc/query embedding pipeline
+  - write artifacts, failures, metadata, and logs
 
-1. If existing `failures.jsonl` is present:
-   - load failed `doc_id` set
-   - process only those docs
-2. Merge success results into existing `docs.parquet`:
-   - key: `doc_id`
-   - strategy: overwrite existing row on key match
-3. Rewrite `failures.jsonl` with only current unresolved failures.
+## 4. Runtime Sequence
 
-## 4.3 Dataset Directory Resolution
-
-Given `--dataset-path` as `datasets/` root and input `--dataset-name`:
-
-1. Check exact subdirectory match first.
-2. If no exact match, perform case-insensitive subdirectory matching.
-3. If no matches, raise `InputValidationError` (dataset not found).
-4. If multiple case-insensitive matches, raise `InputValidationError` (ambiguous dataset name).
-5. Use the resolved unique subdirectory to locate `dataset.json`, `docs.jsonl`, and `train/queries.jsonl`.
+1. Parse `--dataset-path`.
+2. Load model registry from `model_config.yaml`.
+3. For each model and each fixed dataset candidate:
+   - create `output/<dataset_name>/<model_name>/`
+   - init `app.log`
+   - load builder config for current model
+   - resolve dataset context under `--dataset-path`
+   - build embedding strategy
+   - run `BuilderRunner`
+4. Return `0` if all runs succeed; otherwise return non-zero.
 
 ## 5. Data Model (Locked Interfaces)
 
@@ -143,122 +108,28 @@ Input files are loaded from:
 
 ## 6. Failure Modes and Observability
 
-## 6.1 Exception Logging Responsibilities
-
 1. Business exceptions are logged at source layer before propagation.
-2. Log entries include function name, line number, reason text, and key context identifiers.
+2. Log entries include function name, line number, reason text, and context identifiers.
 3. Silent exception swallowing is prohibited.
-4. If logic degrades to empty output, the downgrade point logs a complete failure reason.
+4. `app.log` path is fixed to `output/<dataset_name>/<model_name>/app.log`.
+5. Orchestration return code is fail-fast by combination: any failure returns non-zero.
 
-## 6.2 Logging Plan
+## 7. Verification Plan
 
-`app.log` MUST include:
+1. Contract consistency:
+   - CLI, iteration order, and exit semantics match `contract.md`.
+2. Interface consistency:
+   - README command and argparse signature match.
+3. Regression checks:
+   - unit test suite runs without interface regressions.
 
-1. Run start context: dataset/model/config summary
-2. Per-failure entry with function, line, reason, and key context
-3. End summary: doc_count/query_count/failure_count and duration
-4. Source location fields are emitted by logger formatter configuration (for example `filename:lineno`), not by custom wrapper helpers.
-
-## 6.3 Embedding Strategy Rules
-
-1. Strategy source is `model_config.yaml` only.
-2. Empty `embedding_api_url` resolves to local mode.
-3. Non-empty `embedding_api_url` resolves to HTTP mode.
-4. HTTP payload contract:
-   - request `{"chunks":[...]}`
-   - response `{"vectors":[...]}`
-
-## 7. Stage Gates and Exit Criteria
-
-## 7.1 Design Gate
-
-Exit criteria:
-
-1. This technical design is complete and internally consistent.
-2. Sequence, retry flow, failure handling, and observability are explicit.
-3. Public interfaces are listed and stable.
-
-Artifacts:
-
-- `docs/technical_design.md`
-
-## 7.2 Contract Gate
-
-Exit criteria:
-
-1. CLI signatures are fully specified.
-2. Data schemas and output paths are fully specified.
-3. Behavioral constraints and logging responsibilities are explicit and testable.
-
-Artifacts:
-
-- `contract.md`
-
-## 7.3 Implementation Gate
-
-Exit criteria:
-
-1. Code follows contract exactly.
-2. Retry logic and merge semantics implemented.
-3. Logging contract implemented.
-
-Artifacts:
-
-- runtime scripts and config
-- test evidence
-
-## 7.4 Validation Gate
-
-Exit criteria:
-
-1. Consistency review passed.
-2. Traceability review passed.
-3. Gate readiness review passed.
-4. Pre-implementation policy respected (no coding before Design+Contract PASS).
-
-Artifacts:
-
-- validation checklist/report
-
-## 8. Verification Plan
-
-## 8.1 Consistency Review
-
-1. CLI args in this design MUST exactly match `contract.md`.
-2. Output schemas in this design MUST exactly match `contract.md`.
-
-## 8.2 Traceability Review
-
-Every key requirement must map to:
-
-1. at least one contract clause
-2. at least one acceptance criterion or test scenario
-
-## 8.3 Gate Readiness Review
-
-Each gate must have:
-
-1. explicit pass/fail criteria
-2. named artifact(s)
-3. no ambiguous acceptance language
-
-## 9. Requirement Traceability Matrix
+## 8. Requirement Traceability Matrix
 
 | Requirement | Contract Reference | Validation Evidence |
 |---|---|---|
-| Top1 doc chunk only | Contract Sec. 4.1 | schema checks + doc-level uniqueness tests |
-| Train-only query embedding | Contract Sec. 4.2 | split-path assertion tests |
-| 768 strict vector dim | Contract Sec. 2/4.3 | runtime dim assertions + failure-path tests |
-| Local/HTTP strategy by YAML only | Contract Sec. 2.4/4.4 | config-driven strategy tests |
-| Failed-doc incremental retry | Contract Sec. 4.5 | retry-flow integration test |
-| Case-insensitive dataset resolution with ambiguity handling | Contract Sec. 2.1/2.3 | dataset resolution unit tests |
+| Single CLI arg `--dataset-path` | Contract Sec. 2.1 | argparse + docs check |
+| Fixed model config source | Contract Sec. 2.1 | config loader path check |
+| Fixed dataset candidates | Contract Sec. 2.1/2.3 | orchestrator loop check |
+| 768 strict vector dim | Contract Sec. 2.1/4 | runtime dim assertions + failure-path tests |
+| Local/HTTP strategy by YAML only | Contract Sec. 2.3 | strategy selection tests |
 | Model output log path and exception detail | Contract Sec. 5 | log inspection tests |
-
-## 10. Pre-Implementation Rule
-
-Implementation work is blocked until:
-
-1. Design Gate = `PASS`
-2. Contract Gate = `PASS`
-
-Only after both are passed may implementation proceed to Implementation Gate.

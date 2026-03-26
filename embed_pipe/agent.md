@@ -6,7 +6,7 @@ This document governs the **implementation agent only** for the index input pipe
 
 Primary objective:
 
-- implement `index_scheduler.py`, `build_index_inputs.py`, and supporting config/artifacts
+- implement `build_index_inputs.py` and supporting config/artifacts
 - strictly comply with [contract.md](./contract.md) and [docs/technical_design.md](./docs/technical_design.md)
 
 ## 2. Allowed Scope

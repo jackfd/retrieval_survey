@@ -17,40 +17,38 @@ Normative keywords:
 | Argument | Required | Default | Type | Rules |
 |---|---|---|---|---|
 | `--dataset-path` | Yes | None | path | MUST exist; MUST be the `datasets/` root directory |
-| `--dataset-name` | Yes | None | string | MUST be non-empty; MUST resolve to one sub-dataset directory under `--dataset-path` |
-| `--model-name` | Yes | None | string | MUST exist in `model_config.yaml` model registry |
-| `--config-path` | No | `model_config.yaml` | path | MUST exist and be valid YAML |
-| `--output-root` | No | `output` | path | MUST be writable |
 
 Validation rules:
 
-1. Resolve sub-dataset directory under `--dataset-path` by this order:
-   - exact directory name match with `--dataset-name`
+1. Config source is fixed to `model_config.yaml`; model registry MUST be loaded from YAML `models`.
+2. Output root is fixed to `output`.
+3. Dataset candidates are fixed to `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`.
+4. For each dataset candidate, implementation MUST resolve sub-dataset directory under `--dataset-path` by this order:
+   - exact directory name match
    - otherwise unique case-insensitive match
-2. If case-insensitive matching returns multiple candidates, implementation MUST raise `InputValidationError` with ambiguous dataset-name reason.
-3. Resolved sub-dataset directory MUST contain `dataset.json`.
-4. Resolved `dataset.json` MUST provide usable `docs_file` and `splits.train.queries_file`.
-5. Resolved docs and queries files MUST exist before embedding starts.
-6. If `embedding_dim` is configured as `768`, all output vectors MUST have exactly 768 dimensions.
-7. Embedding strategy selection MUST come from `model_config.yaml` only (no CLI strategy override).
+5. If case-insensitive matching returns multiple candidates, implementation MUST fail that dataset run with ambiguous dataset-name reason.
+6. Resolved sub-dataset directory MUST contain `dataset.json`.
+7. Resolved `dataset.json` MUST provide usable `docs_file` and `splits.train.queries_file`.
+8. Resolved docs and queries files MUST exist before embedding starts.
+9. If `embedding_dim` is configured as `768`, all output vectors MUST have exactly 768 dimensions.
+10. Embedding strategy selection MUST come from `model_config.yaml` only (no CLI strategy override).
+11. Runtime execution order MUST be deterministic by nested iteration:
+   - outer loop: models from YAML order
+   - inner loop: dataset candidates in fixed list order
+12. Any failed (dataset, model) combination MUST cause process exit code to be non-zero.
 
-### 2.2 `index_scheduler.py`
+### 2.2 Dataset Root Conventions
 
-| Argument | Required | Default | Type | Rules |
-|---|---|---|---|---|
-| `--dataset-path` | Yes | None | path | Same validation as builder |
-| `--dataset-name` | Yes | None | string | Same validation as builder |
-| `--model-name` | No | None | string | If absent, scheduler MUST run all configured models |
-| `--config-path` | No | `model_config.yaml` | path | MUST exist and be valid YAML |
-| `--output-root` | No | `output` | path | MUST be writable |
+`--dataset-path` points to `datasets/` root.
 
-Scheduling rules:
+Current governed dataset candidates are:
 
-1. Default mode SHALL execute all configured models in deterministic order.
-2. Single-model mode SHALL execute only the specified model.
-3. One model failure MUST NOT terminate remaining model runs.
+- `HotpotQA`
+- `MSMARCO`
+- `SciFact`
+- `TREC-CAR`
 
-### 2.4 Embedding Strategy Conventions
+### 2.3 Embedding Strategy Conventions
 
 `model_config.yaml` MUST define global strategy keys:
 
@@ -63,17 +61,6 @@ Behavioral rules:
    - request: `{"chunks":[...]}`
    - response: `{"vectors":[...]}`
 3. Strategy resolution and URL source MUST come from YAML only.
-
-### 2.3 Dataset Root Conventions
-
-`--dataset-path` points to `datasets/` root. Sub-datasets are extensible and MUST NOT be constrained to a fixed whitelist.
-
-Current examples include:
-
-- `HotpotQA`
-- `MSMARCO`
-- `SciFact`
-- `TREC-CAR`
 
 ## 3. Data Contracts
 
