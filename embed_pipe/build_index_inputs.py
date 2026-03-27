@@ -44,8 +44,8 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
     )
     if not embedding_strategy_result.ok:
         logger.error(
-            "Failed to build embedding strategy",
-            "model_name=%s" % model_name,
+            "Failed to build embedding strategy model_name=%s",
+            model_name,
         )
         return 1
     embedding_strategy = embedding_strategy_result.value
@@ -60,10 +60,10 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
         embedding_strategy=embedding_strategy,
     )
     logger.info(
-        "dataset_root=%s dataset_dir=%s  model_name=%s",
+        "dataset_root=%s dataset_dir=%s model_name=%s",
         dataset_ctx.dataset_root,
         dataset_ctx.resolved_dataset_dir,
-        builder_cfg.model,
+        builder_cfg.model.model_name,
     )
     run_result = runner.run()
     if not run_result.ok:

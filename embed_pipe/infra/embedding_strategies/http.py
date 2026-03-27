@@ -49,14 +49,19 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                 except (requests.exceptions.RequestException, ValueError) as exc:
                     last_error = exc
                     self.logger.warning(
-                        "embedding_retry_failed batch_index:%s retry:%s"
-                        % (batch_index, retry)
+                        "embedding_retry_failed batch_index=%s retry=%s batch_size=%s url=%s error=%s",
+                        batch_index,
+                        retry,
+                        len(batch),
+                        self.embedding_api_url,
+                        exc,
                     )
 
             if last_error is not None:
                 self.logger.error(
-                    "HTTP embedding failed, batch_index=%s  last_error=%s"
-                    % (batch_index, last_error)
+                    "HTTP embedding failed, batch_index=%s  last_error=%s",
+                    batch_index,
+                    last_error,
                 )
                 raise RuntimeError(
                     "HTTP embedding failed for batch %s: %s" % (batch_index, last_error)

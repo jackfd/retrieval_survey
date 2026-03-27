@@ -5,16 +5,17 @@ from pathlib import Path
 from embed_pipe.domain.models import DatasetContext
 from embed_pipe.domain.result import Result
 
+logger = logging.getLogger(__name__)
+
 
 class DatasetLoader:
     def resolve_subdataset_dir(
         self, dataset_root: Path, dataset_name: str
     ) -> Result[Path]:
-        logger = logging.getLogger("embed_pipe")
         if not dataset_root.exists() or not dataset_root.is_dir():
             logger.error(
-                "dataset-path does not exist or is not a directory",
-                "dataset_root=%s" % dataset_root,
+                "path does not exist or is not a directory dataset_root=%s",
+                dataset_root,
             )
             return Result.failure()
 
@@ -23,31 +24,16 @@ class DatasetLoader:
         if len(exact) == 1:
             return Result.success(exact[0])
 
-        lowered = [
-            path
-            for path in candidates
-            if path.name.casefold() == dataset_name.casefold()
-        ]
-        if not lowered:
-            logger.error(
-                "No sub-dataset directory matched dataset_name",
-                "dataset_root=%s dataset_name=%s" % (dataset_root, dataset_name),
-            )
-            return Result.failure()
-        if len(lowered) > 1:
-            names = [path.name for path in lowered]
-            logger.error(
-                "Ambiguous dataset_name case-insensitive matches",
-                "dataset_root=%s dataset_name=%s matches=%s"
-                % (dataset_root, dataset_name, names),
-            )
-            return Result.failure()
-        return Result.success(lowered[0])
+        logger.error(
+            "No sub-dataset directory matched dataset_name dataset_root=%s dataset_name=%s",
+            dataset_root,
+            dataset_name,
+        )
+        return Result.failure()
 
     def load_dataset_context(
         self, dataset_root: Path, dataset_name: str
     ) -> Result[DatasetContext]:
-        logger = logging.getLogger("embed_pipe")
         resolved_result = self.resolve_subdataset_dir(dataset_root, dataset_name)
         if not resolved_result.ok:
             return Result.failure()
@@ -58,18 +44,14 @@ class DatasetLoader:
 
         dataset_json_path = resolved_dataset_dir / "dataset.json"
         if not dataset_json_path.exists():
-            logger.error(
-                "Missing dataset.json",
-                "dataset_dir=%s" % resolved_dataset_dir,
-            )
+            logger.error("Missing dataset.json dataset_dir=%s", resolved_dataset_dir)
             return Result.failure()
 
         with dataset_json_path.open("r", encoding="utf-8") as fin:
             dataset_meta = json.load(fin)
         if not isinstance(dataset_meta, dict):
             logger.error(
-                "dataset.json must be a JSON object",
-                "dataset_json=%s" % dataset_json_path,
+                "dataset.json must be a JSON object dataset_json=%s", dataset_json_path
             )
             return Result.failure()
 
@@ -81,8 +63,7 @@ class DatasetLoader:
             or not isinstance(splits["train"], dict)
         ):
             logger.error(
-                "dataset.json missing splits.train",
-                "dataset_json=%s" % dataset_json_path,
+                "dataset.json missing splits.train dataset_json=%s", dataset_json_path
             )
             return Result.failure()
         train_queries_rel = str(
@@ -93,14 +74,16 @@ class DatasetLoader:
         queries_path = resolved_dataset_dir / train_queries_rel
         if not docs_path.exists():
             logger.error(
-                "Missing docs file",
-                "dataset_dir=%s docs_path=%s" % (resolved_dataset_dir, docs_path),
+                "Missing docs file dataset_dir=%s docs_path=%s",
+                resolved_dataset_dir,
+                docs_path,
             )
             return Result.failure()
         if not queries_path.exists():
             logger.error(
-                "Missing train queries file",
-                "dataset_dir=%s queries_path=%s" % (resolved_dataset_dir, queries_path),
+                "Missing train queries file dataset_dir=%s queries_path=%s",
+                resolved_dataset_dir,
+                queries_path,
             )
             return Result.failure()
 

@@ -30,8 +30,9 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             return ("flag_embedding", encoder)
 
         logger.error(
-            "Unsupported local provider",
-            "provider=%s model_id=%s" % (model.provider, model.model_id),
+            "Unsupported local provider provider=%s model_id=%s",
+            model.provider,
+            model.model_id,
         )
         raise RuntimeError("Unsupported local provider=%r" % model.provider)
 

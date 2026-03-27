@@ -32,7 +32,10 @@ class QueryService:
             query_text = str(obj.get("query_text", "")).strip()
             if not query_id or not query_text:
                 self.logger.error(
-                    f"query id or text is empty at {queries_path}+{line_num}"
+                    "Invalid query input queries_path=%s line_num=%s query_id=%r: query_id/query_text must be non-empty",
+                    queries_path,
+                    line_num,
+                    query_id,
                 )
                 return Result.failure()
             try:
@@ -45,6 +48,13 @@ class QueryService:
                     }
                 )
             except Exception as exc:
+                self.logger.exception(
+                    "Query embedding failed queries_path=%s line_num=%s query_id=%s error_type=%s",
+                    queries_path,
+                    line_num,
+                    query_id,
+                    type(exc).__name__,
+                )
                 failures.append(
                     FailureRecord(
                         record_type="query",

@@ -69,7 +69,8 @@ class ChunkSelector:
             idxs = np.where(labels == cluster_idx)[0]
             if len(idxs) == 0:
                 self.logger.warning(
-                    "No documents found for cluster_idx=%s, skipping" % cluster_idx
+                    "No documents found for cluster_idx=%s, skipping",
+                    cluster_idx,
                 )
                 continue
             dists = np.linalg.norm(embeddings[idxs] - centers[cluster_idx], axis=1)

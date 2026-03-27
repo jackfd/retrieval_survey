@@ -2,8 +2,12 @@
 import logging
 import os
 from typing import Iterable, Set
-
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from spacy.lang.en.stop_words import STOP_WORDS as EN_STOP_WORDS
+from spacy.lang.zh.stop_words import STOP_WORDS as ZH_STOP_WORDS
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 class StopwordsLoader:
@@ -50,21 +54,24 @@ class StopwordsLoader:
                 with open(config_path, "r", encoding="utf-8") as file_handle:
                     config = yaml.safe_load(file_handle) or {}
                 if not isinstance(config, dict):
-                    logging.getLogger("embed_pipe").error(
-                        "event=stopwords_config_invalid reason=%s context=%s",
-                        "Invalid stopwords config format",
-                        "config_path=%s" % config_path,
+                    logger.error(
+                        "stopwords_config_invalid config_path=%s: invalid stopwords config format",
+                        config_path,
                     )
                     continue
 
-                StopwordsLoader._extend_if_iterable(custom_stopwords, config.get("english_stopwords"))
-                StopwordsLoader._extend_if_iterable(custom_stopwords, config.get("chinese_stopwords"))
+                StopwordsLoader._extend_if_iterable(
+                    custom_stopwords, config.get("english_stopwords")
+                )
+                StopwordsLoader._extend_if_iterable(
+                    custom_stopwords, config.get("chinese_stopwords")
+                )
                 return custom_stopwords
             except Exception as exc:
-                logging.getLogger("embed_pipe").error(
-                    "event=stopwords_load_failed reason=%s context=%s",
+                logger.exception(
+                    "stopwords_load_failed config_path=%s error=%s",
+                    config_path,
                     exc,
-                    "config_path=%s" % config_path,
                 )
 
         return custom_stopwords
@@ -72,33 +79,13 @@ class StopwordsLoader:
     @staticmethod
     def _load_spacy_stopwords() -> Set[str]:
         spacy_stopwords: set[str] = set()
-        try:
-            from spacy.lang.en.stop_words import STOP_WORDS as EN_STOP_WORDS
 
-            spacy_stopwords.update({word.lower() for word in EN_STOP_WORDS})
-        except ImportError:
-            logging.info("spaCy English stopwords not available")
-
-        try:
-            from spacy.lang.zh.stop_words import STOP_WORDS as ZH_STOP_WORDS
-
-            spacy_stopwords.update({word.lower() for word in ZH_STOP_WORDS})
-        except ImportError:
-            logging.info("spaCy Chinese stopwords not available")
-
+        spacy_stopwords.update({word.lower() for word in EN_STOP_WORDS})
+        spacy_stopwords.update({word.lower() for word in ZH_STOP_WORDS})
         return spacy_stopwords
 
     @staticmethod
     def _load_fallback_stopwords() -> Set[str]:
         fallback_stopwords = set()
-        try:
-            from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
-
-            fallback_stopwords.update({word.lower() for word in ENGLISH_STOP_WORDS})
-        except ImportError:
-            logging.getLogger("embed_pipe").error(
-                "event=stopwords_fallback_unavailable reason=%s context=%s",
-                "sklearn is not installed, fallback stopwords unavailable",
-                "provider=sklearn",
-            )
+        fallback_stopwords.update({word.lower() for word in ENGLISH_STOP_WORDS})
         return fallback_stopwords

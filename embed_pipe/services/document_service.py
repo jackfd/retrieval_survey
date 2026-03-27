@@ -28,8 +28,10 @@ class DocumentService:
             doc_text = str(obj.get("doc_text", "")).strip()
             if not doc_id or not doc_text:
                 self.logger.error(
-                    "Invalid docs input at line %s in %s: doc_id/doc_text must be non-empty (doc_id=%r)"
-                    % (line_num, docs_path, doc_id)
+                    "Invalid docs input docs_path=%s line_num=%s doc_id=%r: doc_id/doc_text must be non-empty",
+                    docs_path,
+                    line_num,
+                    doc_id,
                 )
                 return Result.failure()
             if retry_mode and doc_id not in retry_id_set:
@@ -37,6 +39,13 @@ class DocumentService:
             try:
                 selected = self.selector.select_chunks(doc_text)
             except Exception as exc:
+                self.logger.exception(
+                    "Document chunk selection failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
+                    docs_path,
+                    line_num,
+                    doc_id,
+                    type(exc).__name__,
+                )
                 failures.append(
                     FailureRecord(
                         record_type="doc",
