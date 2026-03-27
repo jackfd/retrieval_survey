@@ -55,9 +55,7 @@ class ConfigLoader:
             http_max_retries=int(inference_obj.get("http_max_retries", 2)),
         )
 
-    def _extract_models_list(
-        self, cfg: Dict[str, Any], config_path: Path
-    ) -> List[Dict[str, Any]]:
+    def _extract_models_list(self, cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
         models = cfg.get("models")
         if not isinstance(models, list):
             logger.error("Config key 'models' must be a list")
