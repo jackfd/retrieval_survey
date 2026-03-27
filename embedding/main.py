@@ -49,14 +49,14 @@ def run_once(
     runner.run()
 
 
-def main(dataset_path) -> int:
+def main(dataset_path: str, config_path: str = CONFIG_PATH) -> int:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("embedding")
     config_loader = ConfigLoader()
     try:
         cache_root = initialize_model_cache()
         logger.info("Using shared model cache root: %s", cache_root)
-        all_cfg = config_loader.load_configs(Path(CONFIG_PATH))
+        all_cfg = config_loader.load_configs(Path(config_path))
         strategy_factory = EmbeddingStrategyFactory()
         strategy_cache = {}
         for builder_cfg in all_cfg.values():
@@ -81,5 +81,6 @@ def main(dataset_path) -> int:
 def cli() -> int:
     parser = argparse.ArgumentParser(description="Build index input artifacts")
     parser.add_argument("--dataset-path", required=True)
+    parser.add_argument("--config-path", default=CONFIG_PATH)
     args = parser.parse_args()
-    return main(args.dataset_path)
+    return main(args.dataset_path, args.config_path)
