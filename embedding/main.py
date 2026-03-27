@@ -10,7 +10,9 @@ from embedding.infra.dataset_loader import DatasetLoader
 from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
 from embedding.infra.logger import setup_logger
 from embedding.infra.model_cache import initialize_model_cache
+import os
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 OUTPUT_ROOT = "output"
 CONFIG_PATH = "model_config.yaml"
 DATA_SETS = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]

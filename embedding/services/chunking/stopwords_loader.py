@@ -81,7 +81,7 @@ class StopwordsLoader:
         spacy_stopwords: set[str] = set()
 
         spacy_stopwords.update({word.lower() for word in EN_STOP_WORDS})
-        spacy_stopwords.update({word.lower() for word in ZH_STOP_WORDS})
+        # spacy_stopwords.update({word.lower() for word in ZH_STOP_WORDS})
         return spacy_stopwords
 
     @staticmethod
