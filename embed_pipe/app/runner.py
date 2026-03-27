@@ -30,14 +30,14 @@ class BuilderRunner:
     def run(self) -> None:
         run_start = utc_now_iso()
 
-        runtime = self.builder_cfg.runtime
+        inference = self.builder_cfg.inference
 
         selector = ChunkSelector(
             embedding_strategy=self.embedding_strategy,
             chunk_num=1,
-            config=SelectorConfig(batch_size=runtime.batch_size),
+            config=SelectorConfig(batch_size=inference.batch_size),
         )
-        doc_service = DocumentService(selector=selector, runtime=runtime)
+        doc_service = DocumentService(selector=selector)
         doc_value = doc_service.process(self.dataset_ctx.docs_path)
 
         existing_docs_df = self.output_writer.load_existing_docs()
@@ -49,7 +49,7 @@ class BuilderRunner:
                 subset=["doc_id"], keep="last"
             )
 
-        query_service = QueryService(self.embedding_strategy, runtime)
+        query_service = QueryService(self.embedding_strategy)
         query_value = query_service.process(self.dataset_ctx.queries_path)
 
         metadata = build_run_metadata(
@@ -90,7 +90,6 @@ def build_run_metadata(
             "resolved_dataset_dir": str(dataset_ctx.resolved_dataset_dir),
         },
         "model": {
-            "model_name": model.model_name,
             "provider": model.provider,
             "model_id": model.model_id,
         },

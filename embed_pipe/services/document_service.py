@@ -4,15 +4,14 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from embed_pipe.domain.exceptions import ProcessingError
-from embed_pipe.domain.models import ProcessResult, RuntimeConfig
+from embed_pipe.domain.models import ProcessResult
 from embed_pipe.infra.jsonl_reader import JsonlReader
 from embed_pipe.services.chunking.chunk_selector import ChunkSelector
 
 
 class DocumentService:
-    def __init__(self, selector: ChunkSelector, runtime: RuntimeConfig):
+    def __init__(self, selector: ChunkSelector):
         self.selector = selector
-        self.runtime = runtime
         self.jsonl_reader = JsonlReader()
         self.logger = logging.getLogger(__name__)
 

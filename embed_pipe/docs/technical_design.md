@@ -6,27 +6,27 @@ Define an implementation-aligned architecture for generating index input artifac
 
 Current scope:
 
-- Single CLI entry: `build_index_inputs.py --dataset-path`
+- Single CLI entry: `main.py --dataset-path`
 - Iterate all configured models from `model_config.yaml`
 - Iterate fixed dataset candidates: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
 - Run one `(dataset, model)` build at a time
-- Produce deterministic output layout under `output/<dataset_name>/<model_name>/`
+- Produce deterministic output layout under `output/<dataset_name>/<model_id>/`
 
 ## 2. Non-Negotiable Constraints
 
 1. Public interfaces MUST follow [contract.md](../contract.md).
 2. Vector dimension MUST be exactly 768 for docs and queries.
-3. Output location is fixed: `output/<dataset_name>/<model_name>/`.
+3. Output location is fixed: `output/<dataset_name>/<model_id>/`.
 4. Any failed `(dataset, model)` combination MUST make process exit non-zero.
 
 ## 3. Modules and Responsibilities
 
-## 3.1 `build_index_inputs.py` (entry + orchestrator)
+## 3.1 `main.py` (entry + orchestrator)
 
 Responsibilities:
 
 1. Parse CLI (`--dataset-path` only).
-2. Load all model builder configs via `ConfigLoader.load_all_builder_configs(model_config.yaml)`.
+2. Load all model builder configs via `ConfigLoader.load_configs(model_config.yaml)`.
 3. Use fixed dataset candidates list.
 4. Execute nested loop:
    - outer: model config order from YAML
@@ -63,7 +63,7 @@ Internal fixed sources:
 1. Parse `--dataset-path`.
 2. Load model registry from `model_config.yaml`.
 3. For each model and each fixed dataset candidate:
-   - create `output/<dataset_name>/<model_name>/`
+   - create `output/<dataset_name>/<model_id>/`
    - init `app.log`
    - use current builder config from loaded config map
    - resolve dataset context under `--dataset-path`
@@ -95,7 +95,7 @@ Input files are loaded from:
   - `query_embedding: list<float>[768]`
 - run metadata json:
   - run timestamps
-  - model/provider identity
+  - model_id/provider identity
   - doc/query counters
 
 ## 6. Failure Modes and Observability
@@ -103,7 +103,7 @@ Input files are loaded from:
 1. Business exceptions are logged at source layer before propagation.
 2. Log entries include function name, line number, reason text, and context identifiers.
 3. Silent exception swallowing is prohibited.
-4. `app.log` path is fixed to `output/<dataset_name>/<model_name>/app.log`.
+4. `app.log` path is fixed to `output/<dataset_name>/<model_id>/app.log`.
 5. Orchestration return code is fail-fast by combination: any failure returns non-zero.
 
 ## 7. Verification Plan

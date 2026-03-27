@@ -6,7 +6,7 @@ This repository contains the governance baseline for building index-input artifa
 
 Current runtime entry:
 
-`build_index_inputs.py --dataset-path <datasets_root>`
+`python embed_pipe/main.py --dataset-path <datasets_root>`
 
 The entry script iterates all configured models and fixed datasets (`HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`) and generates embedding artifacts ready for indexing and evaluation.
 
@@ -27,10 +27,10 @@ This governance pack defines:
 
 ## Runtime Workflow
 
-1. Run `build_index_inputs.py` with `--dataset-path`.
-2. Load model list from `model_config.yaml`.
+1. Run `main.py` with `--dataset-path`.
+2. Load builder configs from `model_config.yaml`.
 3. Iterate fixed dataset list: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`.
-4. Execute `run_once(dataset, model)` for each combination.
+4. Execute `run_once(dataset, model_id)` for each combination.
 5. Exit with non-zero status when any combination fails.
 
 ## Prerequisites
@@ -42,7 +42,7 @@ This governance pack defines:
 ## CLI
 
 ```bash
-python embed_pipe/build_index_inputs.py --dataset-path datasets
+python embed_pipe/main.py --dataset-path datasets
 ```
 
 Argument contract:
@@ -77,7 +77,7 @@ Each resolved sub-dataset directory must contain `dataset.json`, docs file, and 
 ```text
 output/
 └── <dataset_name>/
-    └── <model_name>/
+    └── <model_id>/
         ├── docs.parquet
         ├── queries.parquet
         ├── run_metadata.json

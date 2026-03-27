@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from embed_pipe.domain.exceptions import ProcessingError
-from embed_pipe.domain.models import ProcessResult, RuntimeConfig
+from embed_pipe.domain.models import ProcessResult
 from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
 from embed_pipe.infra.jsonl_reader import JsonlReader
 
@@ -14,11 +14,9 @@ class QueryService:
     def __init__(
         self,
         embedding_strategy: EmbeddingStrategy,
-        runtime: RuntimeConfig,
         jsonl_reader: JsonlReader | None = None,
     ):
         self.embedding_strategy = embedding_strategy
-        self.runtime = runtime
         self.jsonl_reader = jsonl_reader or JsonlReader()
         self.logger = logging.getLogger(__name__)
 

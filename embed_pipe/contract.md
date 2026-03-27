@@ -12,7 +12,7 @@ Normative keywords:
 
 ## 2. CLI Contracts
 
-### 2.1 `build_index_inputs.py`
+### 2.1 `main.py`
 
 | Argument | Required | Default | Type | Rules |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ Normative keywords:
 
 Validation rules:
 
-1. Config source is fixed to `model_config.yaml`; model registry MUST be loaded from YAML `models`.
+1. Config source is fixed to `model_config.yaml`; builder configs MUST be loaded from YAML sections `experiment`, `inference`, and `models` where `models` is a non-empty list.
 2. Output root is fixed to `output`.
 3. Dataset candidates are fixed to `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`.
 4. For each dataset candidate, implementation MUST resolve sub-dataset directory under `--dataset-path` by this order:
@@ -50,14 +50,15 @@ Current governed dataset candidates are:
 
 ### 2.3 Embedding Strategy Conventions
 
-`model_config.yaml` MUST define global strategy keys:
+`model_config.yaml` MUST define global strategy keys under `experiment` and `inference`:
 
-- `embedding_api_url`: strategy switch source
+- `experiment`: embedding behavior source
+- `inference.embedding_api_url`: strategy switch source
 
 Behavioral rules:
 
-1. If `embedding_api_url` is empty (or whitespace), implementation MUST use local model encoders directly.
-2. If `embedding_api_url` is non-empty, implementation MUST use HTTP mode and payload contract:
+1. If `inference.embedding_api_url` is empty (or whitespace), implementation MUST use local model encoders directly.
+2. If `inference.embedding_api_url` is non-empty, implementation MUST use HTTP mode and payload contract:
    - request: `{"chunks":[...]}`
    - response: `{"vectors":[...]}`
 3. Strategy resolution and URL source MUST come from YAML only.
@@ -114,7 +115,7 @@ Example:
 
 Output directory MUST be:
 
-`output/<dataset_name>/<model_name>/`
+`output/<dataset_name>/<model_id>/`
 
 ### `docs.parquet`
 
@@ -146,7 +147,7 @@ Minimum required fields:
 |---|---|---|
 | `run.start_time_utc` | string | Yes |
 | `run.end_time_utc` | string | Yes |
-| `model.model_name` | string | Yes |
+| `model.model_id` | string | Yes |
 | `model.provider` | string | Yes |
 | `stats.doc_count` | integer | Yes |
 | `stats.query_count` | integer | Yes |
@@ -166,7 +167,7 @@ Minimum required fields:
 
 ## 5. Logging Contract
 
-1. Log file path MUST be `output/<dataset_name>/<model_name>/app.log`.
+1. Log file path MUST be `output/<dataset_name>/<model_id>/app.log`.
 2. Every failure record in logs MUST include:
    - exception class name
    - message text
@@ -176,7 +177,7 @@ Minimum required fields:
    - function name
    - source line number
    - reason text
-   - key context identifier(s) when available (for example: `doc_id`, `query_id`, `batch_index`, `path`, `model_name`)
+   - key context identifier(s) when available (for example: `doc_id`, `query_id`, `batch_index`, `path`, `model_id`)
 5. Silent exception swallowing is prohibited.
 6. If code intentionally degrades to an empty result (for example `[]` or empty vectors), it MUST emit a complete log entry at that downgrade point, including function name, line number, reason, and context.
 7. Orchestration layer (`pipeline` / `processors`) SHOULD avoid duplicate error logs when source-layer detailed logs already exist.

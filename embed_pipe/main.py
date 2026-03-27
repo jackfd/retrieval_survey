@@ -16,8 +16,8 @@ DATA_SETS = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
 
 
 def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
-    model_name = builder_cfg.model.model_name
-    output_dir = Path(OUTPUT_ROOT) / dataset_name / model_name
+    model_id = builder_cfg.model.model_id
+    output_dir = Path(OUTPUT_ROOT) / dataset_name / model_id
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
@@ -26,7 +26,9 @@ def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
     ds_context = dataset_loader.load_dataset_context(
         Path(dataset_root), dataset_name=dataset_name
     )
-    embedding_strategy = strategy_factory.build(builder_cfg.runtime, builder_cfg.model)
+    embedding_strategy = strategy_factory.build(
+        builder_cfg.experiment, builder_cfg.inference, builder_cfg.model
+    )
 
     runner = BuilderRunner(
         output_dir=output_dir,
@@ -35,10 +37,10 @@ def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
         embedding_strategy=embedding_strategy,
     )
     logger.info(
-        "start: dataset_root=%s dataset_dir=%s model_name=%s",
+        "start: dataset_root=%s dataset_dir=%s model_id=%s",
         dataset_root,
         ds_context.resolved_dataset_dir,
-        model_name,
+        model_id,
     )
     runner.run()
 

@@ -6,13 +6,17 @@ import pandas as pd
 
 
 @dataclass
-class RuntimeConfig:
+class ExperimentConfig:
     embedding_dim: int
     normalize_embeddings: bool
     max_length: int
     query_prefix: str
     doc_prefix: str
     instruction_template: str
+
+
+@dataclass
+class InferenceConfig:
     batch_size: int
     device: str
     embedding_api_url: str
@@ -22,14 +26,14 @@ class RuntimeConfig:
 
 @dataclass
 class ModelConfig:
-    model_name: str
     provider: str
     model_id: str
 
 
 @dataclass
 class BuilderConfig:
-    runtime: RuntimeConfig
+    experiment: ExperimentConfig
+    inference: InferenceConfig
     model: ModelConfig
     raw_config: Dict[str, Any]
 
