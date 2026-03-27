@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retrieval-embedding"
+version = "0.1.0"
+description = "Index input pipeline for embedding artifacts."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [
+  { name = "Unknown", email = "unknown@example.com" }
+]
+dependencies = [
+  "numpy>=1.23",
+  "requests>=2.31",
+  "PyYAML>=6.0",
+  "networkx>=3.1",
+  "scikit-learn>=1.2",
+  "spacy>=3.7",
+  "pandas>=2.0",
+  "pyarrow>=10.0",
+  "sentence-transformers>=3.0",
+  "transformers==4.44.2",
+  "FlagEmbedding==1.3.5",
+]
+
+[project.scripts]
+embedding-build = "embedding.main:cli"
+
+[tool.setuptools]
+packages = [
+  "embedding",
+  "embedding.app",
+  "embedding.domain",
+  "embedding.infra",
+  "embedding.infra.embedding_strategies",
+  "embedding.services",
+  "embedding.services.chunking",
+]
+
+[tool.setuptools.package-dir]
+embedding = "."
+
+[tool.setuptools.package-data]
+embedding = [
+  "model_config.yaml",
+  "services/chunking/stopwords.yaml",
+]

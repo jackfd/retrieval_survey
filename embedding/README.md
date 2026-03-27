@@ -46,6 +46,12 @@
 python embedding/main.py --dataset-path datasets
 ```
 
+安装后：
+
+```bash
+embedding-build --dataset-path datasets
+```
+
 参数契约：
 
 - `--dataset-path`（必需）：数据集根目录

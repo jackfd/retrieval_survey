@@ -78,9 +78,8 @@ def main(dataset_path) -> int:
         return 1
 
 
-if __name__ == "__main__":
+def cli() -> int:
     parser = argparse.ArgumentParser(description="Build index input artifacts")
     parser.add_argument("--dataset-path", required=True)
     args = parser.parse_args()
-    dataset_path = args.dataset_path
-    sys.exit(main(dataset_path))
+    return main(args.dataset_path)
