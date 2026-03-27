@@ -1,4 +1,4 @@
-"""Unit tests for chunk selection and splitting logic."""
+"""chunk 分割与选择逻辑的单元测试，覆盖段落切分、chunk 选择、聚类边界情况和 embedding 异常传播。"""
 
 from __future__ import annotations
 

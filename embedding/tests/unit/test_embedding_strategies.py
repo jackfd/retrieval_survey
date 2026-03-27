@@ -1,4 +1,4 @@
-"""Unit tests for base embedding text preparation."""
+"""基础 embedding 文本预处理的单元测试，覆盖 query/doc 前缀和 instruction_template 的拼接行为。"""
 
 from __future__ import annotations
 

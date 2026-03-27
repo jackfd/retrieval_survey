@@ -1,4 +1,4 @@
-"""Unit tests for HTTP and local embedding strategies."""
+"""HTTP 和本地 embedding 策略的单元测试，覆盖 HTTP 分批、重试、空输入，以及本地 provider 初始化和编码行为。"""
 
 from __future__ import annotations
 

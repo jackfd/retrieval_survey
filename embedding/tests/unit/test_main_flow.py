@@ -1,4 +1,4 @@
-"""Unit tests for runner metadata helpers."""
+"""运行器元数据构建的单元测试，覆盖 run metadata 的时间、模型信息和统计字段生成。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for shared model cache initialization."""
+"""共享模型缓存初始化的单元测试，覆盖默认缓存目录创建和已有环境变量保留行为。"""
 
 from __future__ import annotations
 

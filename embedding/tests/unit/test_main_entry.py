@@ -1,4 +1,4 @@
-"""Unit tests for the CLI-level main orchestration."""
+"""CLI 编排的单元测试，覆盖同一 model_id 在多个数据集之间复用 embedding strategy 的行为。"""
 
 from __future__ import annotations
 

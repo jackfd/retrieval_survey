@@ -1,4 +1,4 @@
-"""Unit tests for document and query services."""
+"""文档和查询服务的单元测试，覆盖正常处理、空字段校验和下游异常包装。"""
 
 from __future__ import annotations
 

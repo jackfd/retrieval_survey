@@ -1,4 +1,4 @@
-"""Unit tests for configuration loading and validation."""
+"""配置加载与校验的单元测试，覆盖 YAML 读取、默认值解析、模型列表提取、模型配置构建、重复 model_id 和非法模型项。"""
 
 from __future__ import annotations
 
