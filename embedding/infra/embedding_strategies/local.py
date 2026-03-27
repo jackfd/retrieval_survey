@@ -56,26 +56,34 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             output = np.asarray(vecs, dtype=np.float32)
             return ensure_embedding_shape(output, self.experiment.embedding_dim)
 
-        try:
-            payload = encoder.encode(
-                prepared,
-                batch_size=int(self.inference.batch_size),
-                max_length=int(self.experiment.max_length),
-                return_dense=True,
-                return_sparse=False,
-                return_colbert_vecs=False,
-            )
-        except TypeError:
-            payload = encoder.encode(
-                prepared,
-                batch_size=int(self.inference.batch_size),
-                max_length=int(self.experiment.max_length),
-            )
+        if provider == "flag_embedding":
+            try:
+                payload = encoder.encode(
+                    prepared,
+                    batch_size=int(self.inference.batch_size),
+                    max_length=int(self.experiment.max_length),
+                    return_dense=True,
+                    return_sparse=False,
+                    return_colbert_vecs=False,
+                )
+            except TypeError:
+                payload = encoder.encode(
+                    prepared,
+                    batch_size=int(self.inference.batch_size),
+                    max_length=int(self.experiment.max_length),
+                )
 
-        dense = payload.get("dense_vecs") if isinstance(payload, dict) else payload
-        output = np.asarray(dense, dtype=np.float32)
-        if self.experiment.normalize_embeddings:
-            norms = np.linalg.norm(output, axis=1, keepdims=True)
-            norms = np.where(norms == 0, 1.0, norms)
-            output = output / norms
-        return ensure_embedding_shape(output, self.experiment.embedding_dim)
+            dense = payload.get("dense_vecs") if isinstance(payload, dict) else payload
+            output = np.asarray(dense, dtype=np.float32)
+            if self.experiment.normalize_embeddings:
+                norms = np.linalg.norm(output, axis=1, keepdims=True)
+                norms = np.where(norms == 0, 1.0, norms)
+                output = output / norms
+            return ensure_embedding_shape(output, self.experiment.embedding_dim)
+
+        logger.error(
+            "Unsupported local provider provider=%s model_id=%s",
+            self.model.provider,
+            self.model.model_id,
+        )
+        raise RuntimeError("Unsupported local provider=%r" % self.model.provider)
