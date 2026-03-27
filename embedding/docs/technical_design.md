@@ -1,127 +1,137 @@
-# Technical Design: Index Input Pipeline
+# 技术设计：索引向量化
 
-## 1. Objective
+## 1. 目标
 
-Define an implementation-aligned architecture for generating index input artifacts from benchmark datasets.
+定义用于从基准数据集生成索引输入工件的、与实现对齐的架构。
 
-Current scope:
+当前范围：
 
-- Single CLI entry: `main.py --dataset-path`
-- Iterate all configured models from `model_config.yaml`
-- Iterate fixed dataset candidates: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
-- Run one `(dataset, model)` build at a time
-- Produce deterministic output layout under `output/<dataset_name>/<model_id>/`
+- 单一 CLI 入口：`main.py --dataset-path`
+- 在策略构建之前初始化共享的本地模型缓存
+- 遍历 `model_config.yaml` 中所有已配置的模型
+- 遍历固定的数据集候选项：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
+- 一次运行一个 `(dataset, model)` 的构建
+- 在 `output/<dataset_name>/<model_id>/` 下生成确定的输出结构
 
-## 2. Non-Negotiable Constraints
+## 2. 不可协商的约束
 
-1. Public interfaces MUST follow [contract.md](../contract.md).
-2. Vector dimension MUST be exactly 768 for docs and queries.
-3. Output location is fixed: `output/<dataset_name>/<model_id>/`.
-4. Any failed `(dataset, model)` combination MUST make process exit non-zero.
+1. 公共接口必须遵循 [contract.md](../contract.md)。
+2. 文档和查询的向量维度必须严格为 768。
+3. 输出位置固定为：`output/<dataset_name>/<model_id>/`。
+4. 任何 `(dataset, model)` 组合的失败都必须在进程退出时返回非零状态码。
 
-## 3. Modules and Responsibilities
+## 3. 模块与职责
 
-## 3.1 `main.py` (entry + orchestrator)
+### 3.1 `main.py`（入口 + 编排器）
 
-Responsibilities:
+职责：
 
-1. Parse CLI (`--dataset-path` only).
-2. Load all model builder configs via `ConfigLoader.load_configs(model_config.yaml)`.
-3. Use fixed dataset candidates list.
-4. Execute nested loop:
-   - outer: model config order from YAML
-   - inner: fixed dataset order
-5. Call `run_once(dataset_path, dataset_name, builder_cfg)`.
-6. Stop and return non-zero immediately when one run fails.
+1. 解析 CLI（仅 `--dataset-path`）。
+2. 通过 `ConfigLoader.load_configs(model_config.yaml)` 加载所有模型构建器配置。
+3. 使用固定的数据集候选项列表。
+4. 执行嵌套循环：
+   - 外层：按 YAML 中的顺序遍历模型配置
+   - 内层：按固定顺序遍历数据集
+5. 调用 `run_once(dataset_path, dataset_name, builder_cfg)`。
+6. 当一次运行失败时立即停止并返回非零状态码。
 
-CLI interface:
+CLI 接口：
 
-- `--dataset-path` (required)
+- `--dataset-path`（必需）
 
-Internal fixed sources:
+内部固定源：
 
-- config path: `model_config.yaml`
-- output root: `output`
-- datasets: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
+- 配置文件路径：`model_config.yaml`
+- 输出根目录：`output`
+- 数据集：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
 
-## 3.2 Supporting Components
+### 3.2 支持组件
 
 - `infra/config_loader.py`
-  - load YAML config
-  - build all per-model builder configs from one entrypoint
+  - 加载 YAML 配置
+  - 从单个入口点构建每个模型的构建器配置
 - `infra/dataset_loader.py`
-  - resolve sub-dataset directory by exact then case-insensitive unique match
-  - load dataset context and file paths from `dataset.json`
+  - 通过精确匹配后不区分大小写的唯一匹配来解析子数据集目录
+  - 从 `dataset.json` 加载数据集上下文和文件路径
 - `infra/embedding_strategies/*`
-  - select local/http embedding strategy from YAML config
+  - 根据 YAML 配置选择本地/HTTP 嵌入策略
+- `infra/model_cache.py`
+  - 为下载的模型初始化稳定的缓存目录
 - `app/runner.py`
-  - execute doc/query embedding pipeline
-  - write artifacts, metadata, and logs
+  - 执行文档/查询嵌入流水线
+  - 写入工件、元数据和日志
 
-## 4. Runtime Sequence
+## 4. 运行时序列
 
-1. Parse `--dataset-path`.
-2. Load model registry from `model_config.yaml`.
-3. For each model and each fixed dataset candidate:
-   - create `output/<dataset_name>/<model_id>/`
-   - init `app.log`
-   - use current builder config from loaded config map
-   - resolve dataset context under `--dataset-path`
-   - build embedding strategy
-   - run `BuilderRunner`
-4. Return `0` if all runs succeed; otherwise return non-zero.
+1. 解析 `--dataset-path`。
+2. 初始化共享的模型缓存目录。
+3. 从 `model_config.yaml` 加载模型注册表。
+4. 对于每个模型和每个固定数据集候选项：
+   - 创建 `output/<dataset_name>/<model_id>/`
+   - 初始化 `app.log`
+   - 使用加载的配置映射中的当前构建器配置
+   - 在 `--dataset-path` 下解析数据集上下文
+   - 构建嵌入策略
+   - 运行 `BuilderRunner`
+5. 如果所有运行成功则返回 `0`；否则返回非零状态码。
 
-## 5. Data Model (Locked Interfaces)
+缓存行为：
 
-## 5.1 Input Records
+- 对于给定模型，首次成功运行可能会将工件下载到共享缓存目录中。
+- 后续运行会重用相同的本地缓存，并且不应重新下载相同的模型文件。
+- 可以使用 `RETRIEVAL_SURVEY_MODEL_CACHE_DIR` 来固定跨机器或会话的缓存位置。
 
-Input files are loaded from:
+## 5. 数据模型（锁定的接口）
+
+### 5.1 输入记录
+
+输入文件从以下路径加载：
 
 `<dataset_path>/<resolved_dataset_dir>/`
 
-- `docs.jsonl`: `doc_id`, `doc_text`
-- `train/queries.jsonl`: `query_id`, `query_text`
-- `train/qrels.jsonl`: `query_id`, `doc_id`, `relevance` (validation compatibility)
+- `docs.jsonl`：`doc_id`，`doc_text`
+- `train/queries.jsonl`：`query_id`，`query_text`
+- `train/qrels.jsonl`：`query_id`，`doc_id`，`relevance`（用于验证兼容性）
 
-## 5.2 Output Records
+### 5.2 输出记录
 
-- docs parquet row:
-  - `doc_id: string`
-  - `chunk_text: string`
-  - `chunk_embedding: list<float>[768]`
-- queries parquet row:
-  - `query_id: string`
-  - `query_text: string`
-  - `query_embedding: list<float>[768]`
-- run metadata json:
-  - run timestamps
-  - model_id/provider identity
-  - doc/query counters
+- docs parquet 行：
+  - `doc_id： string`
+  - `chunk_text： string`
+  - `chunk_embedding： list<float>[768]`
+- queries parquet 行：
+  - `query_id： string`
+  - `query_text： string`
+  - `query_embedding： list<float>[768]`
+- run metadata json：
+  - 运行时间戳
+  - model_id/提供商标识
+  - 文档/查询计数器
 
-## 6. Failure Modes and Observability
+## 6. 故障模式与可观测性
 
-1. Business exceptions are logged at source layer before propagation.
-2. Log entries include function name, line number, reason text, and context identifiers.
-3. Silent exception swallowing is prohibited.
-4. `app.log` path is fixed to `output/<dataset_name>/<model_id>/app.log`.
-5. Orchestration return code is fail-fast by combination: any failure returns non-zero.
+1. 业务异常在传播前于源层记录日志。
+2. 日志条目包含函数名、行号、原因文本和上下文标识符。
+3. 禁止静默吞没异常。
+4. `app.log` 路径固定为 `output/<dataset_name>/<model_id>/app.log`。
+5. 编排返回码按组合快速失败：任何失败都返回非零状态码。
 
-## 7. Verification Plan
+## 7. 验证计划
 
-1. Contract consistency:
-   - CLI, iteration order, and exit semantics match `contract.md`.
-2. Interface consistency:
-   - README command and argparse signature match.
-3. Regression checks:
-   - unit test suite runs without interface regressions.
+1. 契约一致性：
+   - CLI、迭代顺序和退出语义与 `contract.md` 一致。
+2. 接口一致性：
+   - README 命令与 argparse 签名一致。
+3. 回归检查：
+   - 单元测试套件运行时无接口回归。
 
-## 8. Requirement Traceability Matrix
+## 8. 需求可追溯性矩阵
 
-| Requirement | Contract Reference | Validation Evidence |
+| 需求 | 契约参考 | 验证证据 |
 |---|---|---|
-| Single CLI arg `--dataset-path` | Contract Sec. 2.1 | argparse + docs check |
-| Fixed model config source | Contract Sec. 2.1 | config loader path check |
-| Fixed dataset candidates | Contract Sec. 2.1/2.3 | orchestrator loop check |
-| 768 strict vector dim | Contract Sec. 2.1/4 | runtime dim assertions + failure-path tests |
-| Local/HTTP strategy by YAML only | Contract Sec. 2.3 | strategy selection tests |
-| Model output log path and exception detail | Contract Sec. 5 | log inspection tests |
+| 单一 CLI 参数 `--dataset-path` | 契约第 2.1 节 | argparse + 文档检查 |
+| 固定模型配置源 | 契约第 2.1 节 | 配置加载器路径检查 |
+| 固定数据集候选项 | 契约第 2.1/2.3 节 | 编排器循环检查 |
+| 严格 768 维向量 | 契约第 2.1/4 节 | 运行时维度断言 + 故障路径测试 |
+| 仅通过 YAML 选择本地/HTTP 策略 | 契约第 2.3 节 | 策略选择测试 |
+| 模型输出日志路径和异常详情 | 契约第 5 节 | 日志检查测试 |

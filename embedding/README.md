@@ -1,61 +1,74 @@
-# Index Input Pipeline Governance Pack
+# 索引向量化
 
-## Purpose
+## 目的
 
-This repository contains the governance baseline for building index-input artifacts used by retrieval benchmarks.
+本仓库包含用于构建检索基准测试所使用的索引输入工件的治理基线。
 
-Current runtime entry:
+当前运行时入口：
 
 `python embedding/main.py --dataset-path <datasets_root>`
 
-The entry script iterates all configured models and fixed datasets (`HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`) and generates embedding artifacts ready for indexing and evaluation.
+该入口脚本会遍历所有已配置的模型以及固定的数据集（`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`），并生成可用于索引和评估的嵌入工件。
 
-## Scope
+## 范围
 
-This governance pack defines:
+本治理包定义了：
 
-- Required interfaces and runtime behavior
-- Data contracts for input and output artifacts
-- Agent-level implementation constraints
-- Stage gates for design/contract quality
+- 必需的接口和运行时行为
+- 输入和输出工件的数据契约
+- 代理级别的实现约束
+- 设计/契约质量的阶段关卡
 
-## Documentation-First Policy
+## 文档优先策略
 
-- Contract: [contract.md](./contract.md)
-- Agent constraints: [agent.md](./agent.md)
-- Technical design: [docs/technical_design.md](./docs/technical_design.md)
+- 契约：[contract.md](./contract.md)
+- 代理约束：[agent.md](./agent.md)
+- 技术设计：[docs/technical_design.md](./docs/technical_design.md)
 
-## Runtime Workflow
+## 运行时工作流程
 
-1. Run `main.py` with `--dataset-path`.
-2. Load builder configs from `model_config.yaml`.
-3. Iterate fixed dataset list: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`.
-4. Execute `run_once(dataset, model_id)` for each combination.
-5. Exit with non-zero status when any combination fails.
+1. 使用 `--dataset-path` 参数运行 `main.py`。
+2. 从 `model_config.yaml` 加载构建器配置。
+3. 初始化一个共享的本地模型缓存，路径为 `~/.cache/retrieval_survey/models`（除非通过环境变量覆盖）。
+4. 遍历固定的数据集列表：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`。
+5. 对每个数据集和模型的组合执行 `run_once(dataset, model_id)`。
+6. 当任何组合失败时，以非零状态退出。
 
-## Prerequisites
+## 前提条件
 
 - Python 3.10+
 - `PyYAML`
-- Other runtime dependencies from `requirements.txt`
+- `requirements.txt` 中定义的其他运行时依赖
 
-## CLI
+## 命令行接口
 
 ```bash
 python embedding/main.py --dataset-path datasets
 ```
 
-Argument contract:
+参数契约：
 
-- `--dataset-path` (required): datasets root directory
+- `--dataset-path`（必需）：数据集根目录
 
-Internal fixed sources:
+内部固定源：
 
-- Config path: `model_config.yaml`
-- Output root: `output`
-- Dataset candidates: `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`
+- 配置文件路径：`model_config.yaml`
+- 输出根目录：`output`
+- 数据集候选项：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
 
-## Expected Dataset Layout
+模型缓存行为：
+
+- 首次运行时，模型会下载到共享的缓存目录中。
+- 后续运行会重用相同的本地缓存，避免重复下载。
+- 设置 `RETRIEVAL_SURVEY_MODEL_CACHE_DIR` 可更改缓存根目录。
+
+预热工作流程：
+
+1. 在具备网络访问权限的情况下运行流水线一次，以便将每个配置的模型拉取到本地缓存中。
+2. 后续评估时重新运行相同命令，流程应重用磁盘上的缓存文件。
+3. 如需指定专用的缓存位置，请在首次运行前设置 `RETRIEVAL_SURVEY_MODEL_CACHE_DIR`，并在之后持续使用同一路径。
+
+## 预期的数据集目录结构
 
 ```text
 datasets/
@@ -70,9 +83,9 @@ datasets/
 └── TREC-CAR/
 ```
 
-Each resolved sub-dataset directory must contain `dataset.json`, docs file, and train queries file as defined in `dataset.json`.
+每个已解析的子数据集目录必须包含 `dataset.json`、文档文件以及 `dataset.json` 中定义的训练查询文件。
 
-## Output Layout Contract
+## 输出目录结构契约
 
 ```text
 output/
@@ -84,9 +97,9 @@ output/
         └── app.log
 ```
 
-The output path and filenames are fixed contract interfaces and must not be changed without contract revision approval.
+输出路径和文件名为固定的契约接口，未经契约修订批准不得更改。
 
-## Test Command
+## 测试命令
 
 ```bash
 python -m py_compile $(rg --files embedding -g"*.py")

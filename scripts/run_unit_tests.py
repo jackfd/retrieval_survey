@@ -6,6 +6,7 @@ This runner is intentionally lightweight:
 - it first tries the whole unit suite
 - if the whole-suite run fails, it falls back to per-file runs so you can
   isolate the failing module quickly
+- the first run may download model files into the shared local cache
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ UNIT_TEST_FILES = [
     "embedding/tests/unit/test_chunking.py",
     "embedding/tests/unit/test_services.py",
     "embedding/tests/unit/test_main_flow.py",
+    "embedding/tests/unit/test_main_entry.py",
+    "embedding/tests/unit/test_model_cache.py",
 ]
 
 INTEGRATION_TEST_FILES = [

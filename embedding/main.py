@@ -9,25 +9,27 @@ from embedding.infra.config_loader import ConfigLoader, BuilderConfig
 from embedding.infra.dataset_loader import DatasetLoader
 from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
 from embedding.infra.logger import setup_logger
+from embedding.infra.model_cache import initialize_model_cache
 
 OUTPUT_ROOT = "output"
 CONFIG_PATH = "model_config.yaml"
 DATA_SETS = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
 
 
-def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
+def run_once(
+    dataset_root: str,
+    dataset_name: str,
+    builder_cfg: BuilderConfig,
+    embedding_strategy,
+):
     model_id = builder_cfg.model.model_id
     output_dir = Path(OUTPUT_ROOT) / dataset_name / model_id
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
     dataset_loader = DatasetLoader()
-    strategy_factory = EmbeddingStrategyFactory()
     ds_context = dataset_loader.load_dataset_context(
         Path(dataset_root), dataset_name=dataset_name
-    )
-    embedding_strategy = strategy_factory.build(
-        builder_cfg.experiment, builder_cfg.inference, builder_cfg.model
     )
 
     runner = BuilderRunner(
@@ -50,10 +52,21 @@ def main(dataset_path) -> int:
     logger = logging.getLogger("embedding")
     config_loader = ConfigLoader()
     try:
+        cache_root = initialize_model_cache()
+        logger.info("Using shared model cache root: %s", cache_root)
         all_cfg = config_loader.load_configs(Path(CONFIG_PATH))
+        strategy_factory = EmbeddingStrategyFactory()
+        strategy_cache = {}
         for builder_cfg in all_cfg.values():
+            model_id = builder_cfg.model.model_id
+            embedding_strategy = strategy_cache.get(model_id)
+            if embedding_strategy is None:
+                embedding_strategy = strategy_factory.build(
+                    builder_cfg.experiment, builder_cfg.inference, builder_cfg.model
+                )
+                strategy_cache[model_id] = embedding_strategy
             for dname in DATA_SETS:
-                run_once(dataset_path, dname, builder_cfg)
+                run_once(dataset_path, dname, builder_cfg, embedding_strategy)
         return 0
     except EmbedPipeError as exc:
         logger.error("Pipeline failed with domain error: %s", exc)
