@@ -4,7 +4,6 @@ import pandas as pd
 from typing import Any, Dict
 
 from embed_pipe.domain.models import BuilderConfig, DatasetContext
-from embed_pipe.domain.result import Result
 from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
 from embed_pipe.infra.logger import utc_now_iso
 from embed_pipe.infra.output_writer import OutputWriter
@@ -28,7 +27,7 @@ class BuilderRunner:
         self.embedding_strategy = embedding_strategy
         self.logger = logging.getLogger("embed_pipe")
 
-    def run(self) -> Result[None]:
+    def run(self) -> None:
         run_start = utc_now_iso()
 
         runtime = self.builder_cfg.runtime
@@ -46,13 +45,7 @@ class BuilderRunner:
             retry_mode=retry_mode,
             retry_id_set=retry_id_set,
         )
-        if not doc_result.ok:
-            return Result.failure()
-
-        doc_value = doc_result.value
-        if doc_value is None:
-            self.logger.error("Document service returned empty result")
-            return Result.failure()
+        doc_value = doc_result
 
         existing_docs_df = self.output_writer.load_existing_docs()
         merged_docs_df = self.output_writer.merge_docs_with_retry(
@@ -63,14 +56,7 @@ class BuilderRunner:
         )
 
         query_service = QueryService(self.embedding_strategy, runtime)
-        query_result = query_service.process(self.dataset_ctx.queries_path)
-        if not query_result.ok:
-            return Result.failure()
-
-        query_value = query_result.value
-        if query_value is None:
-            self.logger.error("Query service returned empty result")
-            return Result.failure()
+        query_value = query_service.process(self.dataset_ctx.queries_path)
 
         all_failures = doc_value.failures + query_value.failures
 
@@ -101,7 +87,7 @@ class BuilderRunner:
             len(query_value.failures),
             retry_mode,
         )
-        return Result.success(None)
+        return None
 
 
 def build_run_metadata(

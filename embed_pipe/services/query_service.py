@@ -4,9 +4,8 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+from embed_pipe.domain.exceptions import ProcessingError
 from embed_pipe.domain.models import ProcessResult, RuntimeConfig
-from embed_pipe.domain.records import FailureRecord
-from embed_pipe.domain.result import Result
 from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
 from embed_pipe.infra.jsonl_reader import JsonlReader
 
@@ -23,9 +22,8 @@ class QueryService:
         self.jsonl_reader = jsonl_reader or JsonlReader()
         self.logger = logging.getLogger(__name__)
 
-    def process(self, queries_path: Path) -> Result[ProcessResult]:
+    def process(self, queries_path: Path) -> ProcessResult:
         records: List[Dict[str, Any]] = []
-        failures: List[Dict[str, str]] = []
 
         for line_num, obj in self.jsonl_reader.read_objects(queries_path):
             query_id = str(obj.get("query_id", "")).strip()
@@ -37,7 +35,10 @@ class QueryService:
                     line_num,
                     query_id,
                 )
-                return Result.failure()
+                raise ProcessingError(
+                    "Invalid query input queries_path=%s line_num=%s query_id=%r"
+                    % (queries_path, line_num, query_id)
+                )
             try:
                 vectors = self.embedding_strategy.encode([query_text], is_query=True)
                 records.append(
@@ -55,16 +56,12 @@ class QueryService:
                     query_id,
                     type(exc).__name__,
                 )
-                failures.append(
-                    FailureRecord(
-                        record_type="query",
-                        record_id=query_id,
-                        error_message=str(exc),
-                        stage="embedding",
-                    ).to_dict()
-                )
+                raise ProcessingError(
+                    "Query embedding failed queries_path=%s line_num=%s query_id=%s"
+                    % (queries_path, line_num, query_id)
+                ) from exc
 
         df = pd.DataFrame(
             records, columns=["query_id", "query_text", "query_embedding"]
         )
-        return Result.success(ProcessResult(output_df=df, failures=failures))
+        return ProcessResult(output_df=df, failures=[])

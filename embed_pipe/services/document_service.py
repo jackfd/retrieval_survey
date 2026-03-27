@@ -3,9 +3,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 import pandas as pd
 
+from embed_pipe.domain.exceptions import ProcessingError
 from embed_pipe.domain.models import ProcessResult, RuntimeConfig
-from embed_pipe.domain.records import FailureRecord
-from embed_pipe.domain.result import Result
 from embed_pipe.infra.jsonl_reader import JsonlReader
 from embed_pipe.services.chunking.chunk_selector import ChunkSelector
 
@@ -19,9 +18,8 @@ class DocumentService:
 
     def process(
         self, docs_path: Path, retry_mode: bool, retry_id_set: set[str]
-    ) -> Result[ProcessResult]:
+    ) -> ProcessResult:
         doc_records: List[Dict[str, Any]] = []
-        failures: List[Dict[str, str]] = []
 
         for line_num, obj in self.jsonl_reader.read_objects(docs_path):
             doc_id = str(obj.get("doc_id", "")).strip()
@@ -33,7 +31,10 @@ class DocumentService:
                     line_num,
                     doc_id,
                 )
-                return Result.failure()
+                raise ProcessingError(
+                    "Invalid docs input docs_path=%s line_num=%s doc_id=%r"
+                    % (docs_path, line_num, doc_id)
+                )
             if retry_mode and doc_id not in retry_id_set:
                 continue
             try:
@@ -46,15 +47,10 @@ class DocumentService:
                     doc_id,
                     type(exc).__name__,
                 )
-                failures.append(
-                    FailureRecord(
-                        record_type="doc",
-                        record_id=doc_id,
-                        error_message=f"{type(exc).__name__}: {exc}",
-                        stage="chunk_selection",
-                    ).to_dict()
-                )
-                continue
+                raise ProcessingError(
+                    "Document chunk selection failed docs_path=%s line_num=%s doc_id=%s"
+                    % (docs_path, line_num, doc_id)
+                ) from exc
 
             first = selected[0]
             doc_records.append(
@@ -68,4 +64,4 @@ class DocumentService:
         docs_df = pd.DataFrame(
             doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
         )
-        return Result.success(ProcessResult(output_df=docs_df, failures=failures))
+        return ProcessResult(output_df=docs_df, failures=[])

@@ -4,38 +4,46 @@ from typing import Any, Dict
 
 import yaml
 
+from embed_pipe.domain.exceptions import ConfigError
 from embed_pipe.domain.models import BuilderConfig, ModelConfig, RuntimeConfig
-from embed_pipe.domain.result import Result
 
 
 class ConfigLoader:
-    def load_yaml(self, path: Path) -> Result[Dict[str, Any]]:
+    def load_yaml(self, path: Path) -> Dict[str, Any]:
         logger = logging.getLogger("embed_pipe")
         if not path.exists():
             logger.error("Missing config file path=%s", path)
-            return Result.failure()
+            raise ConfigError("Missing config file path=%s" % path)
 
         with path.open("r", encoding="utf-8") as fin:
             cfg = yaml.safe_load(fin) or {}
         if not isinstance(cfg, dict):
             logger.error("Config file must be a mapping path=%s", path)
-            return Result.failure()
-        return Result.success(cfg)
+            raise ConfigError("Config file must be a mapping path=%s" % path)
+        return cfg
 
     def load_builder_config(
         self, config_path: Path, model_name: str
-    ) -> Result[BuilderConfig]:
+    ) -> BuilderConfig:
         logger = logging.getLogger("embed_pipe")
-        cfg_result = self.load_yaml(config_path)
-        if not cfg_result.ok:
-            logger.error("Failed to load config file path=%s", config_path)
-            return Result.failure()
-
-        cfg = cfg_result.value or {}
+        cfg = self.load_yaml(config_path)
         models = cfg.get("models", {})
         if not isinstance(models, dict):
             logger.error("Config key 'models' must be a mapping config_path=%s", config_path)
-            return Result.failure()
+            raise ConfigError(
+                "Config key 'models' must be a mapping config_path=%s" % config_path
+            )
+
+        if model_name not in models:
+            logger.error(
+                "Unknown model_name in config config_path=%s model_name=%s",
+                config_path,
+                model_name,
+            )
+            raise ConfigError(
+                "Unknown model_name in config config_path=%s model_name=%s"
+                % (config_path, model_name)
+            )
 
         model_obj = models[model_name]
         if not isinstance(model_obj, dict):
@@ -44,7 +52,10 @@ class ConfigLoader:
                 config_path,
                 model_name,
             )
-            return Result.failure()
+            raise ConfigError(
+                "Model config must be a mapping config_path=%s model_name=%s"
+                % (config_path, model_name)
+            )
 
         api_url = str(cfg.get("embedding_api_url", "")).strip()
         runtime = RuntimeConfig(
@@ -71,23 +82,21 @@ class ConfigLoader:
                 config_path,
                 model_name,
             )
-            return Result.failure()
+            raise ConfigError(
+                "Model config requires non-empty provider and model_id config_path=%s model_name=%s"
+                % (config_path, model_name)
+            )
 
-        return Result.success(
-            BuilderConfig(runtime=runtime, model=model, raw_config=cfg)
-        )
+        return BuilderConfig(runtime=runtime, model=model, raw_config=cfg)
 
-    def load_models(self, config_path: Path):
-        logger = logging.getLogger("embed_pipe")
-        cfg_result = self.load_yaml(config_path)
-        if not cfg_result.ok:
-            logger.error("Failed to load config file path=%s", config_path)
-            return []
-
-        cfg = cfg_result.value or {}
+    def load_models(self, config_path: Path) -> list[str]:
+        cfg = self.load_yaml(config_path)
         models = cfg.get("models", {})
         if not isinstance(models, dict):
+            logger = logging.getLogger("embed_pipe")
             logger.error("Config key 'models' must be a mapping config_path=%s", config_path)
-            return []
+            raise ConfigError(
+                "Config key 'models' must be a mapping config_path=%s" % config_path
+            )
 
         return list(models.keys())

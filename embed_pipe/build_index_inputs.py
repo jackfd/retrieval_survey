@@ -1,7 +1,9 @@
 import argparse
+import logging
 import sys
 from pathlib import Path
 
+from embed_pipe.domain.exceptions import EmbedPipeError
 from embed_pipe.app.runner import BuilderRunner
 from embed_pipe.infra.config_loader import ConfigLoader
 from embed_pipe.infra.dataset_loader import DatasetLoader
@@ -21,37 +23,13 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
     dataset_loader = DatasetLoader()
     strategy_factory = EmbeddingStrategyFactory()
 
-    builder_cfg_result = config_loader.load_builder_config(
-        Path(config_path), model_name=model_name
-    )
-    if not builder_cfg_result.ok:
-        return 1
-
-    dataset_ctx_result = dataset_loader.load_dataset_context(
+    builder_cfg = config_loader.load_builder_config(Path(config_path), model_name=model_name)
+    dataset_ctx = dataset_loader.load_dataset_context(
         Path(dataset_path), dataset_name=dataset_name
     )
-    if not dataset_ctx_result.ok:
-        return 1
-
-    builder_cfg = builder_cfg_result.value
-    dataset_ctx = dataset_ctx_result.value
-    if builder_cfg is None or dataset_ctx is None:
-        logger.error("Missing required runtime objects")
-        return 1
-
-    embedding_strategy_result = strategy_factory.build(
+    embedding_strategy = strategy_factory.build(
         builder_cfg.runtime, builder_cfg.model
     )
-    if not embedding_strategy_result.ok:
-        logger.error(
-            "Failed to build embedding strategy model_name=%s",
-            model_name,
-        )
-        return 1
-    embedding_strategy = embedding_strategy_result.value
-    if embedding_strategy is None:
-        logger.error("Embedding strategy is empty")
-        return 1
 
     runner = BuilderRunner(
         output_dir=output_dir,
@@ -65,28 +43,34 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
         dataset_ctx.resolved_dataset_dir,
         builder_cfg.model.model_name,
     )
-    run_result = runner.run()
-    if not run_result.ok:
-        return 1
-
+    runner.run()
     return 0
 
 
 def main() -> int:
+    logging.basicConfig(level=logging.INFO)
+    bootstrap_logger = logging.getLogger("embed_pipe")
     parser = argparse.ArgumentParser(description="Build index input artifacts")
     parser.add_argument("--dataset-path", required=True)
     args = parser.parse_args()
 
-    config_loader = ConfigLoader()
-    models = config_loader.load_models(Path(config_path))
-    data_sets = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
+    try:
+        config_loader = ConfigLoader()
+        models = config_loader.load_models(Path(config_path))
+        data_sets = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
 
-    for m in models:
-        for dname in data_sets:
-            ret = run_once(args.dataset_path, dname, m, config_loader)
-            if ret != 0:
-                return ret
-    return 0
+        for m in models:
+            for dname in data_sets:
+                ret = run_once(args.dataset_path, dname, m, config_loader)
+                if ret != 0:
+                    return ret
+        return 0
+    except EmbedPipeError as exc:
+        bootstrap_logger.error("Pipeline failed with domain error: %s", exc)
+        return 1
+    except Exception:
+        bootstrap_logger.exception("Pipeline failed with unexpected error")
+        return 1
 
 
 if __name__ == "__main__":
