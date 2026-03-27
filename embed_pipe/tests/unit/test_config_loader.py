@@ -37,7 +37,7 @@ models:
     )
 
     loader = ConfigLoader()
-    all_cfg = loader.load_all_builder_configs(config_path)
+    all_cfg = loader.load_configs(config_path)
 
     assert list(all_cfg.keys()) == ["m1", "m2"]
     assert all_cfg["m1"].model.model_name == "m1"
@@ -66,7 +66,7 @@ models:
 def test_load_all_builder_configs_missing_file_raises() -> None:
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(Path("not-exist-model-config.yaml"))
+        loader.load_configs(Path("not-exist-model-config.yaml"))
 
 
 def test_load_all_builder_configs_top_level_non_mapping_raises(tmp_path: Path) -> None:
@@ -75,7 +75,7 @@ def test_load_all_builder_configs_top_level_non_mapping_raises(tmp_path: Path) -
 
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(config_path)
+        loader.load_configs(config_path)
 
 
 def test_load_all_builder_configs_models_not_mapping_raises(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ models:
 
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(config_path)
+        loader.load_configs(config_path)
 
 
 def test_load_all_builder_configs_models_empty_raises(tmp_path: Path) -> None:
@@ -104,7 +104,7 @@ models: {}
 
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(config_path)
+        loader.load_configs(config_path)
 
 
 def test_load_all_builder_configs_model_node_non_mapping_raises(tmp_path: Path) -> None:
@@ -119,10 +119,12 @@ models:
 
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(config_path)
+        loader.load_configs(config_path)
 
 
-def test_load_all_builder_configs_model_required_fields_empty_raises(tmp_path: Path) -> None:
+def test_load_all_builder_configs_model_required_fields_empty_raises(
+    tmp_path: Path,
+) -> None:
     config_path = tmp_path / "model_config.yaml"
     _write_text(
         config_path,
@@ -136,4 +138,4 @@ models:
 
     loader = ConfigLoader()
     with pytest.raises(ConfigError):
-        loader.load_all_builder_configs(config_path)
+        loader.load_configs(config_path)

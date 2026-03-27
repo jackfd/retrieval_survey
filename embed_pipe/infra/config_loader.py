@@ -44,13 +44,19 @@ class ConfigLoader:
         logger = logging.getLogger("embed_pipe")
         models = cfg.get("models")
         if not isinstance(models, dict):
-            logger.error("Config key 'models' must be a mapping config_path=%s", config_path)
+            logger.error(
+                "Config key 'models' must be a mapping config_path=%s", config_path
+            )
             raise ConfigError(
                 "Config key 'models' must be a mapping config_path=%s" % config_path
             )
         if not models:
-            logger.error("Config key 'models' must not be empty config_path=%s", config_path)
-            raise ConfigError("Config key 'models' must not be empty config_path=%s" % config_path)
+            logger.error(
+                "Config key 'models' must not be empty config_path=%s", config_path
+            )
+            raise ConfigError(
+                "Config key 'models' must not be empty config_path=%s" % config_path
+            )
         return models
 
     def _build_model_config(
@@ -74,7 +80,7 @@ class ConfigLoader:
             )
         return model
 
-    def load_all_builder_configs(self, config_path: Path) -> Dict[str, BuilderConfig]:
+    def load_configs(self, config_path: Path) -> Dict[str, BuilderConfig]:
         logger = logging.getLogger("embed_pipe")
         cfg = self._load_yaml_mapping(config_path)
         runtime = self._parse_runtime_config(cfg)

@@ -5,67 +5,65 @@ from pathlib import Path
 
 from embed_pipe.domain.exceptions import EmbedPipeError
 from embed_pipe.app.runner import BuilderRunner
-from embed_pipe.infra.config_loader import ConfigLoader
+from embed_pipe.infra.config_loader import ConfigLoader, BuilderConfig
 from embed_pipe.infra.dataset_loader import DatasetLoader
 from embed_pipe.infra.embedding_strategies import EmbeddingStrategyFactory
 from embed_pipe.infra.logger import setup_logger
 
-output_root = "output"
-config_path = "model_config.yaml"
+OUTPUT_ROOT = "output"
+CONFIG_PATH = "model_config.yaml"
+DATA_SETS = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
 
 
-def run_once(dataset_root, dataset_name, builder_cfg):
+def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
     model_name = builder_cfg.model.model_name
-    output_dir = Path(output_root) / dataset_name / model_name
+    output_dir = Path(OUTPUT_ROOT) / dataset_name / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
 
     dataset_loader = DatasetLoader()
     strategy_factory = EmbeddingStrategyFactory()
-
-    dataset_ctx = dataset_loader.load_dataset_context(
+    ds_context = dataset_loader.load_dataset_context(
         Path(dataset_root), dataset_name=dataset_name
     )
     embedding_strategy = strategy_factory.build(builder_cfg.runtime, builder_cfg.model)
 
     runner = BuilderRunner(
         output_dir=output_dir,
-        dataset_ctx=dataset_ctx,
+        dataset_ctx=ds_context,
         builder_cfg=builder_cfg,
         embedding_strategy=embedding_strategy,
     )
     logger.info(
         "start: dataset_root=%s dataset_dir=%s model_name=%s",
         dataset_root,
-        dataset_ctx.resolved_dataset_dir,
+        ds_context.resolved_dataset_dir,
         model_name,
     )
     runner.run()
 
 
-def main() -> int:
+def main(dataset_path) -> int:
     logging.basicConfig(level=logging.INFO)
-    bootstrap_logger = logging.getLogger("embed_pipe")
-    parser = argparse.ArgumentParser(description="Build index input artifacts")
-    parser.add_argument("--dataset-path", required=True)
-    args = parser.parse_args()
-
+    logger = logging.getLogger("embed_pipe")
+    config_loader = ConfigLoader()
     try:
-        config_loader = ConfigLoader()
-        all_cfg = config_loader.load_all_builder_configs(Path(config_path))
-        data_sets = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
-
+        all_cfg = config_loader.load_configs(Path(CONFIG_PATH))
         for builder_cfg in all_cfg.values():
-            for dname in data_sets:
-                run_once(args.dataset_path, dname, builder_cfg)
+            for dname in DATA_SETS:
+                run_once(dataset_path, dname, builder_cfg)
         return 0
     except EmbedPipeError as exc:
-        bootstrap_logger.error("Pipeline failed with domain error: %s", exc)
+        logger.error("Pipeline failed with domain error: %s", exc)
         return 1
     except Exception:
-        bootstrap_logger.exception("Pipeline failed with unexpected error")
+        logger.error("Pipeline failed with unexpected error")
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description="Build index input artifacts")
+    parser.add_argument("--dataset-path", required=True)
+    args = parser.parse_args()
+    dataset_path = args.dataset_path
+    sys.exit(main(dataset_path))
