@@ -47,7 +47,7 @@ def run_once(dataset_root: str, dataset_name: str, builder_cfg: BuilderConfig):
 
 def main(dataset_path) -> int:
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("embed_pipe")
+    logger = logging.getLogger("embedding")
     config_loader = ConfigLoader()
     try:
         all_cfg = config_loader.load_configs(Path(CONFIG_PATH))

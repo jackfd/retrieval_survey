@@ -1,5 +1,5 @@
 class EmbedPipeError(Exception):
-    """Base exception for embed_pipe domain errors."""
+    """Base exception for em domain errors."""
 
 
 class ConfigError(EmbedPipeError):

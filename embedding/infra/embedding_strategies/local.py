@@ -8,6 +8,8 @@ from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConf
 from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
 from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
 
+logger = logging.getLogger("embedding")
+
 
 class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
     def __init__(
@@ -21,7 +23,6 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         self._encoder = self._build_local_encoder(model=model)
 
     def _build_local_encoder(self, model: ModelConfig) -> Tuple[str, object]:
-        logger = logging.getLogger("embed_pipe")
         if model.provider == "sentence_transformers":
             encoder = SentenceTransformer(model.model_id, device=self.inference.device)
             if hasattr(encoder, "max_seq_length"):

@@ -11,6 +11,8 @@ from embedding.services.chunking import ChunkSelector, SelectorConfig
 from embedding.services.document_service import DocumentService
 from embedding.services.query_service import QueryService
 
+logger = logging.getLogger("embedding")
+
 
 class BuilderRunner:
     def __init__(
@@ -25,7 +27,6 @@ class BuilderRunner:
         self.dataset_ctx = dataset_ctx
         self.builder_cfg = builder_cfg
         self.embedding_strategy = embedding_strategy
-        self.logger = logging.getLogger("embed_pipe")
 
     def run(self) -> None:
         run_start = utc_now_iso()
@@ -66,7 +67,7 @@ class BuilderRunner:
             metadata=metadata,
         )
 
-        self.logger.info(
+        logger.info(
             "end: doc_count=%s query_count=%s",
             len(merged_docs_df),
             len(query_value.output_df),

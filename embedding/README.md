@@ -6,7 +6,7 @@ This repository contains the governance baseline for building index-input artifa
 
 Current runtime entry:
 
-`python embed_pipe/main.py --dataset-path <datasets_root>`
+`python embedding/main.py --dataset-path <datasets_root>`
 
 The entry script iterates all configured models and fixed datasets (`HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`) and generates embedding artifacts ready for indexing and evaluation.
 
@@ -42,7 +42,7 @@ This governance pack defines:
 ## CLI
 
 ```bash
-python embed_pipe/main.py --dataset-path datasets
+python embedding/main.py --dataset-path datasets
 ```
 
 Argument contract:
@@ -89,5 +89,5 @@ The output path and filenames are fixed contract interfaces and must not be chan
 ## Test Command
 
 ```bash
-python -m py_compile $(rg --files embed_pipe -g"*.py")
+python -m py_compile $(rg --files embedding -g"*.py")
 ```
