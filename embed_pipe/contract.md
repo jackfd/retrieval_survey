@@ -132,29 +132,12 @@ Output directory MUST be:
 | `query_text` | string | Yes | Original query text |
 | `query_embedding` | list<float> | Yes | Length exactly 768 |
 
-### `failures.jsonl`
-
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `doc_id` | string | Yes | Failed doc identifier |
-| `error_type` | string | Yes | Exception class name |
-| `error_message` | string | Yes | Non-empty |
-| `timestamp_utc` | string | Yes | ISO-8601 UTC timestamp |
-
-Example:
-
-```json
-{"doc_id":"d2","error_type":"ChunkSelectionError","error_message":"No valid chunk selected","timestamp_utc":"2026-03-25T04:00:00Z"}
-```
-
 ### `run_metadata.json`
 
 Required top-level keys:
 
 - `run`
-- `dataset_metadata`
 - `model`
-- `runtime_config`
 - `stats`
 
 Minimum required fields:
@@ -163,19 +146,10 @@ Minimum required fields:
 |---|---|---|
 | `run.start_time_utc` | string | Yes |
 | `run.end_time_utc` | string | Yes |
-| `dataset_metadata.dataset_name` | string | Yes |
-| `dataset_metadata.version` | string | Yes |
-| `dataset_metadata.subset` | string | Yes |
-| `dataset_metadata.task` | string | Yes |
-| `dataset_metadata.domain` | string | Yes |
-| `dataset_metadata.language` | string | Yes |
 | `model.model_name` | string | Yes |
 | `model.provider` | string | Yes |
-| `runtime_config.embedding_dim` | integer | Yes |
-| `runtime_config.batch_size` | integer | Yes |
 | `stats.doc_count` | integer | Yes |
 | `stats.query_count` | integer | Yes |
-| `stats.failure_count` | integer | Yes |
 
 ## 4. Behavioral Contracts
 
@@ -186,10 +160,9 @@ Minimum required fields:
 4. **Embedding strategy**:
    - empty `embedding_api_url` MUST use direct local encoding.
    - non-empty `embedding_api_url` MUST use HTTP mode.
-5. **Incremental retry**:
-   - If `failures.jsonl` exists from a previous run, implementation MUST process only failed docs.
-   - Successful retries MUST be merged into existing `docs.parquet` by `doc_id` overwrite semantics.
-   - Query embeddings MAY be regenerated in full for consistency.
+5. **Fail-fast execution**:
+   - Any document or query processing error MUST fail the current `(dataset, model)` run immediately.
+   - Failed runs MUST return non-zero exit status and MUST NOT degrade into partial-success outputs.
 
 ## 5. Logging Contract
 

@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Sequence
+from typing import List
 
 import networkx as nx
 import numpy as np
@@ -23,49 +23,6 @@ class ChunkScorer:
 
     def tokenize(self, text: str) -> List[str]:
         return re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?|[\u4e00-\u9fff]", text.lower())
-
-    @staticmethod
-    def standardize(values: np.ndarray) -> np.ndarray:
-        if values.size == 0:
-            return values
-        if np.allclose(values.std(), 0.0):
-            return np.zeros_like(values, dtype=float)
-        return (values - values.mean()) / values.std()
-
-    def _compute_tfidf_fallback(
-        self, chunks: Sequence[str]
-    ) -> tuple[np.ndarray, List[str]]:
-        tokens_per_chunk = [self.tokenize(chunk) for chunk in chunks]
-        vocab = sorted({token for tokens in tokens_per_chunk for token in tokens})
-        if not vocab:
-            raise ValueError("empty vocabulary")
-
-        token_to_idx = {token: idx for idx, token in enumerate(vocab)}
-        tf = np.zeros((len(chunks), len(vocab)), dtype=float)
-        df = np.zeros(len(vocab), dtype=float)
-
-        for row, tokens in enumerate(tokens_per_chunk):
-            if not tokens:
-                continue
-            counts: Dict[str, int] = {}
-            for token in tokens:
-                if token in self.stop_words:
-                    continue
-                counts[token] = counts.get(token, 0) + 1
-            if not counts:
-                continue
-
-            for token, count in counts.items():
-                idx = token_to_idx[token]
-                tf[row, idx] = count / len(tokens)
-            for token in counts:
-                df[token_to_idx[token]] += 1
-
-        if np.count_nonzero(tf) == 0:
-            raise ValueError("empty vocabulary")
-
-        idf = np.log((1 + len(chunks)) / (1 + df)) + 1.0
-        return tf * idf, vocab
 
     def compute_global_statistics(self, chunks: List[str]) -> None:
         self.vectorizer = TfidfVectorizer(

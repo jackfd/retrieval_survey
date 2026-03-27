@@ -80,7 +80,6 @@ output/
     └── <model_name>/
         ├── docs.parquet
         ├── queries.parquet
-        ├── failures.jsonl
         ├── run_metadata.json
         └── app.log
 ```
@@ -90,5 +89,5 @@ The output path and filenames are fixed contract interfaces and must not be chan
 ## Test Command
 
 ```bash
-python -m unittest discover -s embed_pipe/tests -t . -v
+python -m py_compile $(rg --files embed_pipe -g"*.py")
 ```

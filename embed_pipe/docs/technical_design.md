@@ -57,7 +57,7 @@ Internal fixed sources:
   - select local/http embedding strategy from YAML config
 - `app/runner.py`
   - execute doc/query embedding pipeline
-  - write artifacts, failures, metadata, and logs
+  - write artifacts, metadata, and logs
 
 ## 4. Runtime Sequence
 
@@ -94,17 +94,10 @@ Input files are loaded from:
   - `query_id: string`
   - `query_text: string`
   - `query_embedding: list<float>[768]`
-- failures jsonl row:
-  - `doc_id: string`
-  - `error_type: string`
-  - `error_message: string`
-  - `timestamp_utc: string`
 - run metadata json:
   - run timestamps
-  - dataset metadata
   - model/provider identity
-  - runtime config snapshot
-  - doc/query/failure counters
+  - doc/query counters
 
 ## 6. Failure Modes and Observability
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pandas as pd
 
@@ -46,4 +46,3 @@ class DatasetContext:
 @dataclass
 class ProcessResult:
     output_df: pd.DataFrame
-    failures: List[Dict[str, str]]

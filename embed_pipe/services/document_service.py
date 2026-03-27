@@ -16,9 +16,7 @@ class DocumentService:
         self.jsonl_reader = JsonlReader()
         self.logger = logging.getLogger(__name__)
 
-    def process(
-        self, docs_path: Path, retry_mode: bool, retry_id_set: set[str]
-    ) -> ProcessResult:
+    def process(self, docs_path: Path) -> ProcessResult:
         doc_records: List[Dict[str, Any]] = []
 
         for line_num, obj in self.jsonl_reader.read_objects(docs_path):
@@ -35,8 +33,6 @@ class DocumentService:
                     "Invalid docs input docs_path=%s line_num=%s doc_id=%r"
                     % (docs_path, line_num, doc_id)
                 )
-            if retry_mode and doc_id not in retry_id_set:
-                continue
             try:
                 selected = self.selector.select_chunks(doc_text)
             except Exception as exc:
@@ -64,4 +60,4 @@ class DocumentService:
         docs_df = pd.DataFrame(
             doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
         )
-        return ProcessResult(output_df=docs_df, failures=[])
+        return ProcessResult(output_df=docs_df)

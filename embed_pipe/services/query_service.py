@@ -64,4 +64,4 @@ class QueryService:
         df = pd.DataFrame(
             records, columns=["query_id", "query_text", "query_embedding"]
         )
-        return ProcessResult(output_df=df, failures=[])
+        return ProcessResult(output_df=df)

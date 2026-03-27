@@ -12,10 +12,8 @@ from embed_pipe.infra.logger import setup_logger
 
 output_root = "output"
 config_path = "model_config.yaml"
-dataset_path = "dataset"
 
-
-def run_once(dataset_path, dataset_name, model_name, config_loader):
+def run_once(dataset_root, dataset_name, model_name, config_loader):
     output_dir = Path(output_root) / dataset_name / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
@@ -25,7 +23,7 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
 
     builder_cfg = config_loader.load_builder_config(Path(config_path), model_name=model_name)
     dataset_ctx = dataset_loader.load_dataset_context(
-        Path(dataset_path), dataset_name=dataset_name
+        Path(dataset_root), dataset_name=dataset_name
     )
     embedding_strategy = strategy_factory.build(
         builder_cfg.runtime, builder_cfg.model
@@ -44,7 +42,6 @@ def run_once(dataset_path, dataset_name, model_name, config_loader):
         builder_cfg.model.model_name,
     )
     runner.run()
-    return 0
 
 
 def main() -> int:
@@ -61,9 +58,7 @@ def main() -> int:
 
         for m in models:
             for dname in data_sets:
-                ret = run_once(args.dataset_path, dname, m, config_loader)
-                if ret != 0:
-                    return ret
+                run_once(args.dataset_path, dname, m, config_loader)
         return 0
     except EmbedPipeError as exc:
         bootstrap_logger.error("Pipeline failed with domain error: %s", exc)
