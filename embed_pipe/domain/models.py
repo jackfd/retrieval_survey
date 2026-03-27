@@ -47,4 +47,3 @@ class DatasetContext:
 class ProcessResult:
     output_df: pd.DataFrame
     failures: List[Dict[str, str]]
-    attempted_count: int

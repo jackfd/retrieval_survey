@@ -7,10 +7,7 @@ import pandas as pd
 from embed_pipe.domain.models import ProcessResult, RuntimeConfig
 from embed_pipe.domain.records import FailureRecord
 from embed_pipe.domain.result import Result
-from embed_pipe.infra.embedding_strategies import (
-    EmbeddingStrategy,
-    ensure_embedding_shape,
-)
+from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
 from embed_pipe.infra.jsonl_reader import JsonlReader
 
 
@@ -24,14 +21,11 @@ class QueryService:
         self.embedding_strategy = embedding_strategy
         self.runtime = runtime
         self.jsonl_reader = jsonl_reader or JsonlReader()
-        self.logger = logging.getLogger("embed_pipe")
+        self.logger = logging.getLogger(__name__)
 
     def process(self, queries_path: Path) -> Result[ProcessResult]:
-        query_ids: List[str] = []
-        query_texts: List[str] = []
         records: List[Dict[str, Any]] = []
         failures: List[Dict[str, str]] = []
-        attempted_count = 0
 
         for line_num, obj in self.jsonl_reader.read_objects(queries_path):
             query_id = str(obj.get("query_id", "")).strip()
@@ -41,14 +35,8 @@ class QueryService:
                     f"query id or text is empty at {queries_path}+{line_num}"
                 )
                 return Result.failure()
-            query_ids.append(query_id)
-            query_texts.append(query_text)
-
-        for query_id, query_text in zip(query_ids, query_texts):
-            attempted_count += 1
             try:
                 vectors = self.embedding_strategy.encode([query_text], is_query=True)
-                vectors = ensure_embedding_shape(vectors, self.runtime.embedding_dim)
                 records.append(
                     {
                         "query_id": query_id,
@@ -69,8 +57,4 @@ class QueryService:
         df = pd.DataFrame(
             records, columns=["query_id", "query_text", "query_embedding"]
         )
-        return Result.success(
-            ProcessResult(
-                output_df=df, failures=failures, attempted_count=attempted_count
-            )
-        )
+        return Result.success(ProcessResult(output_df=df, failures=failures))

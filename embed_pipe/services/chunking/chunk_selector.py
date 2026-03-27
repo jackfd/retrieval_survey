@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
-import logging
 from typing import Dict, List
-
+import logging
 import numpy as np
-
-from embed_pipe.infra.embedding_strategies import (
-    BaseEmbeddingStrategy,
-    ensure_embedding_shape,
-)
-from .chunk_clusterer import ChunkClusterer
+from sklearn.cluster import KMeans
+from embed_pipe.infra.embedding_strategies import BaseEmbeddingStrategy
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter
 from .selector_config import SelectorConfig
@@ -21,95 +16,29 @@ class ChunkSelector:
         embedding_strategy: BaseEmbeddingStrategy,
         chunk_num: int = 5,
         config: SelectorConfig | None = None,
-        text_processor: ChunkSplitter | None = None,
     ):
         self.embedding_strategy = embedding_strategy
         self.chunk_num = max(1, int(chunk_num))
         self.config = config or SelectorConfig()
 
         cluster_num = max(1, int(self.chunk_num * self.config.cluster_ratio))
-
-        self.text_processor = text_processor or ChunkSplitter(
-            min_sentences=3, max_tokens=8092
-        )
+        self.text_processor = ChunkSplitter(min_sentences=3, max_tokens=8092)
         self.stop_words = StopwordsLoader.load_stopwords()
 
-        self.clusterer = ChunkClusterer(cluster_num=cluster_num)
+        self.cluster_num = max(1, int(cluster_num))
         self.scorer = ChunkScorer(stop_words=self.stop_words, config=self.config)
+        self.logger = logging.getLogger(__name__)
 
-    def split_paragraphs(self, text: str) -> List[str]:
-        return self.text_processor.split_paragraphs(text)
-
-    def compute_global_statistics(self, chunks: List[str]) -> None:
-        self.scorer.compute_global_statistics(chunks)
-
-    def get_embeddings(self, chunks: List[str]) -> np.ndarray:
-        vectors = self.embedding_strategy.encode(chunks, is_query=False)
-        output = np.asarray(vectors, dtype=np.float32)
-        expected_dim = int(self.embedding_strategy.runtime.embedding_dim)
-        return ensure_embedding_shape(output, expected_dim)
-
-    def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
-        return self.clusterer.cluster_chunks(embeddings)
-
-    def compute_scores(
-        self, chunks: List[str], candidate_idxs: List[int], title: str = ""
-    ) -> np.ndarray:
-        return self.scorer.compute_scores(chunks, candidate_idxs, title=title)
-
-    def select_chunks(self, text: str, title: str) -> List[Dict]:
-        logger = logging.getLogger("embed_pipe")
+    def select_chunks(self, text: str, title: str = "") -> List[Dict]:
+        """
+        外部保证text非空且长度合理，以及处理异常。
+        """
         chunks = self.text_processor.split_paragraphs(text)
-        if not chunks:
-            logger.error(
-                "No valid paragraphs after text splitting",
-                "text_length=%s" % (len(text) if isinstance(text, str) else 0),
-            )
-            return []
-
-        try:
-            self.compute_global_statistics(chunks)
-        except ValueError:
-            logger.error(
-                "Global statistics computation failed",
-                "chunk_count=%s" % len(chunks),
-            )
-            return []
-
-        try:
-            embeddings = self.get_embeddings(chunks)
-        except Exception:
-            logger.error(
-                "Embedding retrieval failed",
-                "chunk_count=%s" % len(chunks),
-            )
-            return []
-
-        if embeddings.size == 0:
-            logger.error(
-                "Embeddings are empty",
-                "chunk_count=%s" % len(chunks),
-            )
-            return []
+        self.scorer.compute_global_statistics(chunks)
+        embeddings = self.embedding_strategy.encode(chunks, is_query=False)
 
         candidate_idxs = self.cluster_chunks(embeddings)
-        if not candidate_idxs:
-            logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
-                "No valid candidate indices after clustering",
-                "embedding_shape=%s" % (embeddings.shape,),
-            )
-            return []
-
-        scores = self.compute_scores(chunks, candidate_idxs, title=title)
-        if len(scores) == 0:
-            logger.error(
-                "event=chunk_select_degrade reason=%s context=%s",
-                "Computed scores are empty",
-                "candidate_count=%s" % len(candidate_idxs),
-            )
-            return []
-
+        scores = self.scorer.compute_scores(chunks, candidate_idxs, title)
         top_indices = np.arange(len(candidate_idxs))
         if len(candidate_idxs) > self.chunk_num:
             top_indices = np.argsort(scores)[-self.chunk_num :][::-1]
@@ -125,3 +54,24 @@ class ChunkSelector:
                 }
             )
         return result
+
+    def cluster_chunks(self, embeddings: np.ndarray) -> List[int]:
+        cluster_num = min(self.cluster_num, embeddings.shape[0])
+        kmeans = KMeans(
+            n_clusters=cluster_num, random_state=42, n_init=10, max_iter=300
+        )
+        kmeans.fit(embeddings)
+        labels = kmeans.labels_
+        centers = kmeans.cluster_centers_
+
+        candidates = []
+        for cluster_idx in range(cluster_num):
+            idxs = np.where(labels == cluster_idx)[0]
+            if len(idxs) == 0:
+                self.logger.warning(
+                    "No documents found for cluster_idx=%s, skipping" % cluster_idx
+                )
+                continue
+            dists = np.linalg.norm(embeddings[idxs] - centers[cluster_idx], axis=1)
+            candidates.append(int(idxs[np.argmin(dists)]))
+        return candidates

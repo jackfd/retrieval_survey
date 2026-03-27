@@ -3,6 +3,8 @@ import logging
 import re
 from typing import Callable, List
 
+logger = logging.getLogger(__name__)
+
 
 class ChunkSplitter:
     _LIST_ITEM_PATTERN = re.compile(r"^(?:[-*−•·▪‣]|\d+[\.)。、])\s+")
@@ -20,14 +22,19 @@ class ChunkSplitter:
         self.token_counter = token_counter
 
     def split_paragraphs(self, text: str) -> List[str]:
-        if not isinstance(text, str) or not text.strip():
-            logging.getLogger("embed_pipe").error(
-                "event=splitter_degrade reason=%s context=%s",
-                "Invalid input text for split_paragraphs",
-                "text_type=%s" % type(text).__name__,
-            )
-            return []
+        """
+        将输入文本分割成段落列表
 
+        该方法根据换行符(\n\n)将输入文本分割成原始段落，
+        然后根据最大token数、最小句子数等限制进一步处理这些段落，
+        最终返回一个合适的段落列表。
+
+        参数:
+            text (str): 需要分割的输入文本
+
+        返回:
+            List[str]: 分割后的段落列表
+        """
         raw_paragraphs = re.split(r"\n{2,}", text)
         chunks = []
         for paragraph in raw_paragraphs:
@@ -51,7 +58,11 @@ class ChunkSplitter:
         return chunks
 
     def _sentence_count(self, text: str) -> int:
-        sentences = [segment.strip() for segment in self._SENTENCE_SPLIT_PATTERN.split(text) if segment.strip()]
+        sentences = [
+            segment.strip()
+            for segment in self._SENTENCE_SPLIT_PATTERN.split(text)
+            if segment.strip()
+        ]
         return len(sentences)
 
     def _count_tokens(self, text: str) -> int:

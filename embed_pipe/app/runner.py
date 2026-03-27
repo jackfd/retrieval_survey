@@ -81,8 +81,6 @@ class BuilderRunner:
             builder_cfg=self.builder_cfg,
             merged_docs_df=merged_docs_df,
             query_df=query_value.output_df,
-            attempted_docs=doc_value.attempted_count,
-            attempted_queries=query_value.attempted_count,
             doc_failures_count=len(doc_value.failures),
             query_failures_count=len(query_value.failures),
         )
@@ -95,10 +93,8 @@ class BuilderRunner:
         )
 
         self.logger.info(
-            "end: attempted_doc_count=%s attempted_query_count=%s doc_count=%s query_count=%s "
+            "end:  doc_count=%s query_count=%s "
             "doc_failure_count=%s query_failure_count=%s retry_mode=%s",
-            doc_value.attempted_count,
-            query_value.attempted_count,
             len(merged_docs_df),
             len(query_value.output_df),
             len(doc_value.failures),
@@ -115,8 +111,6 @@ def build_run_metadata(
     builder_cfg: BuilderConfig,
     merged_docs_df: pd.DataFrame,
     query_df: pd.DataFrame,
-    attempted_docs: int,
-    attempted_queries: int,
     doc_failures_count: int,
     query_failures_count: int,
 ) -> Dict[str, Any]:
@@ -135,8 +129,6 @@ def build_run_metadata(
             "model_id": model.model_id,
         },
         "stats": {
-            "attempted_doc_count": attempted_docs,
-            "attempted_query_count": attempted_queries,
             "doc_count": int(len(merged_docs_df)),
             "query_count": int(len(query_df)),
             "doc_failure_count": int(doc_failures_count),

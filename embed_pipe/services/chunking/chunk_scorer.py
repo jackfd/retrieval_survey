@@ -4,15 +4,8 @@ from typing import Dict, List, Sequence
 import networkx as nx
 import numpy as np
 
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.preprocessing import StandardScaler
-
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    TfidfVectorizer = None
-    StandardScaler = None
-    SKLEARN_AVAILABLE = False
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import StandardScaler
 
 from .selector_config import SelectorConfig
 
@@ -39,7 +32,9 @@ class ChunkScorer:
             return np.zeros_like(values, dtype=float)
         return (values - values.mean()) / values.std()
 
-    def _compute_tfidf_fallback(self, chunks: Sequence[str]) -> tuple[np.ndarray, List[str]]:
+    def _compute_tfidf_fallback(
+        self, chunks: Sequence[str]
+    ) -> tuple[np.ndarray, List[str]]:
         tokens_per_chunk = [self.tokenize(chunk) for chunk in chunks]
         vocab = sorted({token for tokens in tokens_per_chunk for token in tokens})
         if not vocab:
@@ -73,22 +68,15 @@ class ChunkScorer:
         return tf * idf, vocab
 
     def compute_global_statistics(self, chunks: List[str]) -> None:
-        if not chunks:
-            raise ValueError("chunks must not be empty")
-
-        if SKLEARN_AVAILABLE:
-            self.vectorizer = TfidfVectorizer(
-                stop_words=list(self.stop_words),
-                tokenizer=self.tokenize,
-                token_pattern=None,
-                lowercase=True,
-            )
-            tfidf_sparse = self.vectorizer.fit_transform(chunks)
-            self.tfidf_matrix = tfidf_sparse.toarray()
-            self.tfidf_feature_names = list(self.vectorizer.get_feature_names_out())
-        else:
-            self.vectorizer = None
-            self.tfidf_matrix, self.tfidf_feature_names = self._compute_tfidf_fallback(chunks)
+        self.vectorizer = TfidfVectorizer(
+            stop_words=list(self.stop_words),
+            tokenizer=self.tokenize,
+            token_pattern=None,
+            lowercase=True,
+        )
+        tfidf_sparse = self.vectorizer.fit_transform(chunks)
+        self.tfidf_matrix = tfidf_sparse.toarray()
+        self.tfidf_feature_names = list(self.vectorizer.get_feature_names_out())
 
         self.keywords = set()
         for row in self.tfidf_matrix:
@@ -111,10 +99,7 @@ class ChunkScorer:
                         graph.add_edge(w1, w2, weight=1)
 
         if graph.number_of_nodes() > 0:
-            try:
-                token_scores = nx.pagerank(graph)
-            except ModuleNotFoundError:
-                token_scores = nx.degree_centrality(graph)
+            token_scores = nx.pagerank(graph)
         else:
             token_scores = {}
 
@@ -127,12 +112,13 @@ class ChunkScorer:
             score = float(np.mean([token_scores.get(word, 0.0) for word in words]))
             self.text_rank_scores.append(score)
 
-    def compute_scores(self, chunks: List[str], candidate_idxs: List[int], title: str = "") -> np.ndarray:
-        if not candidate_idxs:
-            return np.array([], dtype=float)
-
+    def compute_scores(
+        self, chunks: List[str], candidate_idxs: List[int], title: str = ""
+    ) -> np.ndarray:
         tfidf_scores = np.sum(self.tfidf_matrix[candidate_idxs], axis=1)
-        text_rank_scores = np.array([self.text_rank_scores[i] for i in candidate_idxs], dtype=float)
+        text_rank_scores = np.array(
+            [self.text_rank_scores[i] for i in candidate_idxs], dtype=float
+        )
 
         keyword_count = len(self.keywords)
         if keyword_count == 0:
@@ -145,27 +131,23 @@ class ChunkScorer:
                 ],
                 dtype=float,
             )
-
-        title_tokens = set(self.tokenize(title)) if title else set()
-        if title_tokens:
+        title = str(title).strip()
+        if title:
+            title_tokens = set(self.tokenize(title))
             title_scores = np.array(
                 [
-                    len(set(self.tokenize(chunks[i])) & title_tokens) / len(title_tokens)
+                    len(set(self.tokenize(chunks[i])) & title_tokens)
+                    / len(title_tokens)
                     for i in candidate_idxs
                 ],
                 dtype=float,
             )
             coverage_scores = 0.8 * coverage_scores + 0.2 * title_scores
 
-        if SKLEARN_AVAILABLE:
-            scaler = StandardScaler()
-            tfidf_norm = scaler.fit_transform(tfidf_scores.reshape(-1, 1)).flatten()
-            text_rank_norm = scaler.fit_transform(text_rank_scores.reshape(-1, 1)).flatten()
-            coverage_norm = scaler.fit_transform(coverage_scores.reshape(-1, 1)).flatten()
-        else:
-            tfidf_norm = self.standardize(tfidf_scores)
-            text_rank_norm = self.standardize(text_rank_scores)
-            coverage_norm = self.standardize(coverage_scores)
+        scaler = StandardScaler()
+        tfidf_norm = scaler.fit_transform(tfidf_scores.reshape(-1, 1)).flatten()
+        text_rank_norm = scaler.fit_transform(text_rank_scores.reshape(-1, 1)).flatten()
+        coverage_norm = scaler.fit_transform(coverage_scores.reshape(-1, 1)).flatten()
 
         return (
             self.config.alpha * tfidf_norm

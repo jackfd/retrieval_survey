@@ -12,9 +12,9 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
     def __init__(self, runtime: RuntimeConfig):
         super().__init__(runtime)
         self.embedding_api_url = runtime.embedding_api_url
+        self.logger = logging.getLogger(__name__)
 
     def encode(self, texts, is_query):
-        logger = logging.getLogger("embed_pipe")
         prepared = self._prepare_texts(texts, is_query=is_query)
         vectors = []
         for start in range(0, len(prepared), self.runtime.batch_size):
@@ -30,7 +30,9 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     )
                     resp.raise_for_status()
                     payload = resp.json()
-                    if "vectors" not in payload or not isinstance(payload["vectors"], list):
+                    if "vectors" not in payload or not isinstance(
+                        payload["vectors"], list
+                    ):
                         raise ValueError("embedding response missing 'vectors' list")
 
                     batch_vectors = np.asarray(payload["vectors"], dtype=np.float32)
@@ -38,8 +40,7 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                         raise ValueError("embedding vectors must be a 2D array")
                     if batch_vectors.shape[0] != len(batch):
                         raise ValueError(
-                            "embedding vector count mismatch: expected %s, got %s"
-                            % (len(batch), batch_vectors.shape[0])
+                            f"embedding vector count mismatch: expected {len(batch)}, got {batch_vectors.shape[0]}"
                         )
 
                     vectors.append(batch_vectors)
@@ -47,21 +48,19 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     break
                 except (requests.exceptions.RequestException, ValueError) as exc:
                     last_error = exc
-                    logger.error(
-                        "event=embedding_http_retry_failed reason=%s context=%s",
-                        exc,
-                        "batch_index=%s retry=%s batch_size=%s url=%s"
-                        % (batch_index, retry, len(batch), self.embedding_api_url),
+                    self.logger.warning(
+                        "embedding_retry_failed batch_index:%s retry:%s"
+                        % (batch_index, retry)
                     )
 
             if last_error is not None:
-                logger.error(
-                    "event=embedding_http_failed reason=%s context=%s",
-                    "HTTP embedding failed",
-                    "batch_index=%s batch_size=%s url=%s last_error=%s"
-                    % (batch_index, len(batch), self.embedding_api_url, last_error),
+                self.logger.error(
+                    "HTTP embedding failed, batch_index=%s  last_error=%s"
+                    % (batch_index, last_error)
                 )
-                raise RuntimeError("HTTP embedding failed for batch %s: %s" % (batch_index, last_error))
+                raise RuntimeError(
+                    "HTTP embedding failed for batch %s: %s" % (batch_index, last_error)
+                )
 
         if not vectors:
             output = np.empty((0, self.runtime.embedding_dim), dtype=np.float32)
