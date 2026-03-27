@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 import yaml
 
-from embed_pipe.domain.exceptions import ConfigError
-from embed_pipe.domain.models import (
+from embedding.domain.exceptions import ConfigError
+from embedding.domain.models import (
     BuilderConfig,
     ExperimentConfig,
     InferenceConfig,

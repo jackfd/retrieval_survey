@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from embed_pipe.domain.exceptions import ConfigError
-from embed_pipe.infra.config_loader import ConfigLoader
+from embedding.domain.exceptions import ConfigError
+from embedding.infra.config_loader import ConfigLoader
 
 
 def _write_text(path: Path, text: str) -> None:

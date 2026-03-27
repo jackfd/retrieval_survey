@@ -3,9 +3,9 @@ import logging
 import numpy as np
 import requests
 
-from embed_pipe.domain.models import ExperimentConfig, InferenceConfig
-from embed_pipe.infra.embedding_strategies.base import BaseEmbeddingStrategy
-from embed_pipe.infra.embedding_strategies.shape import ensure_embedding_shape
+from embedding.domain.models import ExperimentConfig, InferenceConfig
+from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
+from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
 
 
 class HttpEmbeddingStrategy(BaseEmbeddingStrategy):

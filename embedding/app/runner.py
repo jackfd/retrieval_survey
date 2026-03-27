@@ -3,13 +3,13 @@ import logging
 import pandas as pd
 from typing import Any, Dict
 
-from embed_pipe.domain.models import BuilderConfig, DatasetContext
-from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
-from embed_pipe.infra.logger import utc_now_iso
-from embed_pipe.infra.output_writer import OutputWriter
-from embed_pipe.services.chunking import ChunkSelector, SelectorConfig
-from embed_pipe.services.document_service import DocumentService
-from embed_pipe.services.query_service import QueryService
+from embedding.domain.models import BuilderConfig, DatasetContext
+from embedding.infra.embedding_strategies import EmbeddingStrategy
+from embedding.infra.logger import utc_now_iso
+from embedding.infra.output_writer import OutputWriter
+from embedding.services.chunking import ChunkSelector, SelectorConfig
+from embedding.services.document_service import DocumentService
+from embedding.services.query_service import QueryService
 
 
 class BuilderRunner:

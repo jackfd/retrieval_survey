@@ -3,12 +3,12 @@ import logging
 import sys
 from pathlib import Path
 
-from embed_pipe.domain.exceptions import EmbedPipeError
-from embed_pipe.app.runner import BuilderRunner
-from embed_pipe.infra.config_loader import ConfigLoader, BuilderConfig
-from embed_pipe.infra.dataset_loader import DatasetLoader
-from embed_pipe.infra.embedding_strategies import EmbeddingStrategyFactory
-from embed_pipe.infra.logger import setup_logger
+from embedding.domain.exceptions import EmbedPipeError
+from embedding.app.runner import BuilderRunner
+from embedding.infra.config_loader import ConfigLoader, BuilderConfig
+from embedding.infra.dataset_loader import DatasetLoader
+from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
+from embedding.infra.logger import setup_logger
 
 OUTPUT_ROOT = "output"
 CONFIG_PATH = "model_config.yaml"

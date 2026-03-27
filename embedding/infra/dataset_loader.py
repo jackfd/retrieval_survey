@@ -2,8 +2,8 @@ import json
 import logging
 from pathlib import Path
 
-from embed_pipe.domain.exceptions import DatasetError
-from embed_pipe.domain.models import DatasetContext
+from embedding.domain.exceptions import DatasetError
+from embedding.domain.models import DatasetContext
 
 logger = logging.getLogger(__name__)
 

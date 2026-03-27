@@ -4,9 +4,9 @@ from typing import Tuple
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from FlagEmbedding import BGEM3FlagModel
-from embed_pipe.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
-from embed_pipe.infra.embedding_strategies.base import BaseEmbeddingStrategy
-from embed_pipe.infra.embedding_strategies.shape import ensure_embedding_shape
+from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
+from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
+from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
 
 
 class LocalEmbeddingStrategy(BaseEmbeddingStrategy):

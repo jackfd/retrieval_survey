@@ -4,10 +4,10 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from embed_pipe.domain.exceptions import ProcessingError
-from embed_pipe.domain.models import ProcessResult
-from embed_pipe.infra.embedding_strategies import EmbeddingStrategy
-from embed_pipe.infra.jsonl_reader import JsonlReader
+from embedding.domain.exceptions import ProcessingError
+from embedding.domain.models import ProcessResult
+from embedding.infra.embedding_strategies import EmbeddingStrategy
+from embedding.infra.jsonl_reader import JsonlReader
 
 
 class QueryService:

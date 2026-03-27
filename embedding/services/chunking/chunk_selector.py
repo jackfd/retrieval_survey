@@ -3,7 +3,7 @@ from typing import Dict, List
 import logging
 import numpy as np
 from sklearn.cluster import KMeans
-from embed_pipe.infra.embedding_strategies import BaseEmbeddingStrategy
+from embedding.infra.embedding_strategies import BaseEmbeddingStrategy
 from .chunk_scorer import ChunkScorer
 from .chunk_splitter import ChunkSplitter
 from .selector_config import SelectorConfig

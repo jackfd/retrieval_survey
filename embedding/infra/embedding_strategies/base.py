@@ -2,7 +2,7 @@ from typing import List, Protocol
 
 import numpy as np
 
-from embed_pipe.domain.models import ExperimentConfig, InferenceConfig
+from embedding.domain.models import ExperimentConfig, InferenceConfig
 
 
 class EmbeddingStrategy(Protocol):
