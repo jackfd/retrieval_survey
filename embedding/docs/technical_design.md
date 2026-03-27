@@ -98,11 +98,11 @@ CLI 接口：
 - docs parquet 行：
   - `doc_id： string`
   - `chunk_text： string`
-  - `chunk_embedding： list<float>[768]`
+  - `chunk_embedding： list<float>[<= embedding_dim]`
 - queries parquet 行：
   - `query_id： string`
   - `query_text： string`
-  - `query_embedding： list<float>[768]`
+  - `query_embedding： list<float>[<= embedding_dim]`
 - run metadata json：
   - 运行时间戳
   - model_id/提供商标识
@@ -132,6 +132,6 @@ CLI 接口：
 | 单一 CLI 参数 `--dataset-path` | 契约第 2.1 节 | argparse + 文档检查 |
 | 固定模型配置源 | 契约第 2.1 节 | 配置加载器路径检查 |
 | 固定数据集候选项 | 契约第 2.1/2.3 节 | 编排器循环检查 |
-| 严格 768 维向量 | 契约第 2.1/4 节 | 运行时维度断言 + 故障路径测试 |
+| 维度不超过 embedding_dim | 契约第 2.1/4 节 | 运行时维度断言 + 故障路径测试 |
 | 仅通过 YAML 选择本地/HTTP 策略 | 契约第 2.3 节 | 策略选择测试 |
 | 模型输出日志路径和异常详情 | 契约第 5 节 | 日志检查测试 |

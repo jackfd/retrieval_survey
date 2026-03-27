@@ -97,8 +97,8 @@ datasets/
 output/
 └── <dataset_name>/
     └── <model_id>/
-        ├── docs.parquet
-        ├── queries.parquet
+        ├── docs_dim<embedding_dim>.parquet
+        ├── queries_dim<embedding_dim>.parquet
         ├── run_metadata.json
         └── app.log
 ```

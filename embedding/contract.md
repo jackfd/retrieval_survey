@@ -30,7 +30,7 @@ Validation rules:
 6. Resolved sub-dataset directory MUST contain `dataset.json`.
 7. Resolved `dataset.json` MUST provide usable `docs_file` and `splits.train.queries_file`.
 8. Resolved docs and queries files MUST exist before embedding starts.
-9. If `embedding_dim` is configured as `768`, all output vectors MUST have exactly 768 dimensions.
+9. Output vectors MUST have dimension less than or equal to the configured `embedding_dim`.
 10. Embedding strategy selection MUST come from `model_config.yaml` only (no CLI strategy override).
 11. Runtime execution order MUST be deterministic by nested iteration:
    - outer loop: models from YAML order
@@ -117,21 +117,21 @@ Output directory MUST be:
 
 `output/<dataset_name>/<model_id>/`
 
-### `docs.parquet`
+### `docs_dim<embedding_dim>.parquet`
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `doc_id` | string | Yes | Unique in output file |
 | `chunk_text` | string | Yes | Top1 selected chunk text, non-empty |
-| `chunk_embedding` | list<float> | Yes | Length exactly 768 |
+| `chunk_embedding` | list<float> | Yes | Length <= embedding_dim |
 
-### `queries.parquet`
+### `queries_dim<embedding_dim>.parquet`
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `query_id` | string | Yes | Unique in output file |
 | `query_text` | string | Yes | Original query text |
-| `query_embedding` | list<float> | Yes | Length exactly 768 |
+| `query_embedding` | list<float> | Yes | Length <= embedding_dim |
 
 ### `run_metadata.json`
 
@@ -154,9 +154,9 @@ Minimum required fields:
 
 ## 4. Behavioral Contracts
 
-1. **Top1 only**: each `doc_id` MUST map to exactly one selected chunk in final `docs.parquet`.
+1. **Top1 only**: each `doc_id` MUST map to exactly one selected chunk in final `docs_dim<embedding_dim>.parquet`.
 2. **Train-only queries**: query embeddings MUST be generated from `train/queries.jsonl` only.
-3. **Strict 768 dimensions**: implementation MUST fail the affected item when vector dimension is not 768.
+3. **Dimension upper bound**: implementation MUST fail the affected item when vector dimension exceeds `embedding_dim`.
    - Padding or truncation fallback is prohibited.
 4. **Embedding strategy**:
    - empty `embedding_api_url` MUST use direct local encoding.

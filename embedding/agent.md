@@ -36,8 +36,8 @@ Every implementation PR/change set MUST include explicit evidence for:
    - CLI args exactly match contract
    - output schema exactly match contract
 2. **Schema checks**
-   - docs parquet fields and vector dimension checks
-   - queries parquet fields and vector dimension checks
+   - docs parquet fields and <= embedding_dim checks
+   - queries parquet fields and <= embedding_dim checks
 3. **Logging checks**
    - `app.log` path correctness
    - exception class and message presence

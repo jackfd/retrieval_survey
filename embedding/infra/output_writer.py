@@ -6,11 +6,14 @@ import pandas as pd
 
 
 class OutputWriter:
-    def __init__(self, output_dir: Path):
+    def __init__(self, output_dir: Path, embedding_dim: int):
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.docs_parquet_path = self.output_dir / "docs.parquet"
-        self.queries_parquet_path = self.output_dir / "queries.parquet"
+        dim_label = int(embedding_dim)
+        self.docs_parquet_path = self.output_dir / f"docs_dim{dim_label}.parquet"
+        self.queries_parquet_path = (
+            self.output_dir / f"queries_dim{dim_label}.parquet"
+        )
         self.metadata_path = self.output_dir / "run_metadata.json"
 
     def load_existing_docs(self) -> pd.DataFrame:

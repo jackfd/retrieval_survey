@@ -23,7 +23,9 @@ class BuilderRunner:
         builder_cfg: BuilderConfig,
         embedding_strategy: EmbeddingStrategy,
     ):
-        self.output_writer = OutputWriter(output_dir)
+        self.output_writer = OutputWriter(
+            output_dir, embedding_dim=builder_cfg.experiment.embedding_dim
+        )
         self.dataset_ctx = dataset_ctx
         self.builder_cfg = builder_cfg
         self.embedding_strategy = embedding_strategy

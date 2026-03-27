@@ -1,26 +1,26 @@
 experiment:
-  embedding_dim: 768
+  embedding_dim: 1024
   normalize_embeddings: true
-  max_length: 512
+  max_length: 8192
   query_prefix: ""
   doc_prefix: ""
   instruction_template: ""
 
 inference:
   batch_size: 64
-  device: "cuda"
+  device: "cpu"
   embedding_api_url: ""
   http_timeout: 30.0
   http_max_retries: 2
 
 models:
-  - model_id: granite-embedding-english-r2
+  - model_id: ibm-granite/granite-embedding-english-r2
     provider: sentence_transformers
-  - model_id: gte-multilingual-base
+  - model_id: Alibaba-NLP/gte-multilingual-base
     provider: sentence_transformers
-  - model_id: Qwen3-Embedding-0.6B
+  - model_id: Qwen/Qwen3-Embedding-0.6B
     provider: sentence_transformers
-  - model_id: jina-embeddings-v5-text-small-retrieval
+  - model_id: jinaai/jina-embeddings-v5-text-small-retrieval
     provider: sentence_transformers
-  - model_id: bge-m3
+  - model_id: BAAI/bge-m3
     provider: flag_embedding

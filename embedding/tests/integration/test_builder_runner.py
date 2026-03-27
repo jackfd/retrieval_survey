@@ -118,7 +118,7 @@ def test_builder_runner_run_writes_outputs_and_metadata(tmp_path):
                 "chunk_embedding": [9.0, 9.0, 9.0, 9.0],
             }
         ]
-    ).to_parquet(output_dir / "docs.parquet", index=False)
+    ).to_parquet(output_dir / "docs_dim4.parquet", index=False)
 
     base_module = _load_base_module()
     fake_embedding_pkg = _build_fake_embedding_package(base_module)
@@ -166,8 +166,8 @@ def test_builder_runner_run_writes_outputs_and_metadata(tmp_path):
         (["主题查询"], True),
     ]
 
-    docs_df = pd.read_parquet(output_dir / "docs.parquet")
-    queries_df = pd.read_parquet(output_dir / "queries.parquet")
+    docs_df = pd.read_parquet(output_dir / "docs_dim4.parquet")
+    queries_df = pd.read_parquet(output_dir / "queries_dim4.parquet")
     with (output_dir / "run_metadata.json").open("r", encoding="utf-8") as fin:
         metadata = json.load(fin)
 
