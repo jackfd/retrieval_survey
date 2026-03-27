@@ -26,12 +26,12 @@ Current scope:
 Responsibilities:
 
 1. Parse CLI (`--dataset-path` only).
-2. Load model list via `ConfigLoader.load_models(model_config.yaml)`.
+2. Load all model builder configs via `ConfigLoader.load_all_builder_configs(model_config.yaml)`.
 3. Use fixed dataset candidates list.
 4. Execute nested loop:
-   - outer: model list order from YAML
+   - outer: model config order from YAML
    - inner: fixed dataset order
-5. Call `run_once(dataset_path, dataset_name, model_name, config_loader)`.
+5. Call `run_once(dataset_path, dataset_name, builder_cfg)`.
 6. Stop and return non-zero immediately when one run fails.
 
 CLI interface:
@@ -48,8 +48,7 @@ Internal fixed sources:
 
 - `infra/config_loader.py`
   - load YAML config
-  - build per-model runtime config
-  - return model key list for orchestration
+  - build all per-model builder configs from one entrypoint
 - `infra/dataset_loader.py`
   - resolve sub-dataset directory by exact then case-insensitive unique match
   - load dataset context and file paths from `dataset.json`
@@ -66,7 +65,7 @@ Internal fixed sources:
 3. For each model and each fixed dataset candidate:
    - create `output/<dataset_name>/<model_name>/`
    - init `app.log`
-   - load builder config for current model
+   - use current builder config from loaded config map
    - resolve dataset context under `--dataset-path`
    - build embedding strategy
    - run `BuilderRunner`

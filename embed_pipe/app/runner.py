@@ -37,10 +37,8 @@ class BuilderRunner:
             chunk_num=1,
             config=SelectorConfig(batch_size=runtime.batch_size),
         )
-        document_service = DocumentService(selector=selector, runtime=runtime)
-        doc_value = document_service.process(
-            docs_path=self.dataset_ctx.docs_path,
-        )
+        doc_service = DocumentService(selector=selector, runtime=runtime)
+        doc_value = doc_service.process(self.dataset_ctx.docs_path)
 
         existing_docs_df = self.output_writer.load_existing_docs()
         merged_docs_df = pd.concat(

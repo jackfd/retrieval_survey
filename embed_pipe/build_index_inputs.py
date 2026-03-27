@@ -13,7 +13,9 @@ from embed_pipe.infra.logger import setup_logger
 output_root = "output"
 config_path = "model_config.yaml"
 
-def run_once(dataset_root, dataset_name, model_name, config_loader):
+
+def run_once(dataset_root, dataset_name, builder_cfg):
+    model_name = builder_cfg.model.model_name
     output_dir = Path(output_root) / dataset_name / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logger(output_dir / "app.log")
@@ -21,13 +23,10 @@ def run_once(dataset_root, dataset_name, model_name, config_loader):
     dataset_loader = DatasetLoader()
     strategy_factory = EmbeddingStrategyFactory()
 
-    builder_cfg = config_loader.load_builder_config(Path(config_path), model_name=model_name)
     dataset_ctx = dataset_loader.load_dataset_context(
         Path(dataset_root), dataset_name=dataset_name
     )
-    embedding_strategy = strategy_factory.build(
-        builder_cfg.runtime, builder_cfg.model
-    )
+    embedding_strategy = strategy_factory.build(builder_cfg.runtime, builder_cfg.model)
 
     runner = BuilderRunner(
         output_dir=output_dir,
@@ -36,10 +35,10 @@ def run_once(dataset_root, dataset_name, model_name, config_loader):
         embedding_strategy=embedding_strategy,
     )
     logger.info(
-        "dataset_root=%s dataset_dir=%s model_name=%s",
-        dataset_ctx.dataset_root,
+        "start: dataset_root=%s dataset_dir=%s model_name=%s",
+        dataset_root,
         dataset_ctx.resolved_dataset_dir,
-        builder_cfg.model.model_name,
+        model_name,
     )
     runner.run()
 
@@ -53,12 +52,12 @@ def main() -> int:
 
     try:
         config_loader = ConfigLoader()
-        models = config_loader.load_models(Path(config_path))
+        all_cfg = config_loader.load_all_builder_configs(Path(config_path))
         data_sets = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
 
-        for m in models:
+        for builder_cfg in all_cfg.values():
             for dname in data_sets:
-                run_once(args.dataset_path, dname, m, config_loader)
+                run_once(args.dataset_path, dname, builder_cfg)
         return 0
     except EmbedPipeError as exc:
         bootstrap_logger.error("Pipeline failed with domain error: %s", exc)
