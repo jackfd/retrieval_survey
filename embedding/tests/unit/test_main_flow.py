@@ -99,7 +99,7 @@ def test_builder_runner_logs_counts_for_empty_outputs(tmp_path, caplog):
     ):
         document_service_cls.return_value.process.return_value.output_df = empty_docs
         query_service_cls.return_value.process.return_value.output_df = empty_queries
-        caplog.set_level("INFO", logger=__name__)
+        caplog.set_level("INFO", logger="embedding.app.runner")
 
         runner = runner_module.BuilderRunner(
             output_dir=tmp_path / "output",
@@ -111,5 +111,5 @@ def test_builder_runner_logs_counts_for_empty_outputs(tmp_path, caplog):
 
     selector_cls.assert_called_once()
     assert "start: model_id=test-model" in caplog.text
-    assert "end: model_id=test-model" in caplog.text
+    assert "end: start_time_utc=2026-03-27T00:00:00Z end_time_utc=2026-03-27T00:00:01Z" in caplog.text
     assert "doc_count=0 chunk_count=0 query_count=0" in caplog.text

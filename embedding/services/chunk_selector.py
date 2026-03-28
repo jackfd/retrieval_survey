@@ -3,7 +3,6 @@ import logging
 import re
 from typing import Dict, List, Sequence
 from dataclasses import dataclass
-
 import numpy as np
 
 from embedding.infra.embedding_strategies import EmbeddingStrategy
@@ -72,6 +71,13 @@ class ChunkSelector:
         ]
 
     def _split_block(self, text: str) -> List[str]:
+        """
+        将文本块拆分为较小的子块，确保每个子块不超过目标token数。
+
+        首先检查整个文本的 token 数是否已低于目标值，如果超过则按句子拆分。
+        然后尝试将句子组合成不大于目标 toke n数的块。
+        对于超过硬性限制的单个句子，则使用更细粒度的方法将其拆分。
+        """
         token_count = self._count_tokens(text)
         if token_count <= self.config.target_tokens:
             return [text]
@@ -80,6 +86,7 @@ class ChunkSelector:
         if len(sentences) <= 1:
             return self._split_long_text(text, self.config.hard_max_tokens)
 
+        # 按句子拆分并将它们组合成合适的块
         chunks: List[str] = []
         current = ""
         for sentence in sentences:
@@ -87,6 +94,7 @@ class ChunkSelector:
             if not sentence:
                 continue
 
+            # 如果单个句子超出硬性token限制，则单独处理
             if self._count_tokens(sentence) > self.config.hard_max_tokens:
                 if current:
                     chunks.append(current)
@@ -96,11 +104,13 @@ class ChunkSelector:
                 )
                 continue
 
+            # 尝试将当前句子与前一个句子合并
             candidate = sentence if not current else current + " " + sentence
             if self._count_tokens(candidate) <= self.config.target_tokens:
                 current = candidate
                 continue
 
+            # 如果合并后的文本超出了目标token数，则将当前文本块加入列表
             if current:
                 chunks.append(current)
             current = sentence
@@ -108,6 +118,7 @@ class ChunkSelector:
         if current:
             chunks.append(current)
 
+        # 最终检查，确保没有任何块超过硬性最大token限制
         final_chunks: List[str] = []
         for chunk in chunks:
             if self._count_tokens(chunk) > self.config.hard_max_tokens:
@@ -125,12 +136,16 @@ class ChunkSelector:
         return [sentence for sentence in sentences if sentence]
 
     def _split_long_text(self, text: str, token_limit: int) -> List[str]:
+        """将 text 按指定的 token_limit 分割成多个部分"""
+        # 如果整个文本的token数不超过限制，直接返回原文本作为单一分块
         if self._count_tokens(text) <= token_limit:
             return [text]
 
+        # 按照标点符号和空格分割文本
         parts = [
             part.strip() for part in re.split(r"([,，:：、\s]+)", text) if part.strip()
         ]
+        # 如果无法按标点符号分割，则使用字符分割方法
         if len(parts) <= 1:
             return self._split_by_chars(text, token_limit)
 
@@ -138,18 +153,23 @@ class ChunkSelector:
         current = ""
         for part in parts:
             candidate = part if not current else current + part
+            # 如果合并后的文本token数未超过限制，则更新current
             if self._count_tokens(candidate) <= token_limit:
                 current = candidate
                 continue
 
+            # 当前合并文本超出限制时，将current添加到结果列表
             if current:
                 chunks.append(current.strip())
+            # 如果单个part就超过了token限制，则进一步分割它
             if self._count_tokens(part) > token_limit:
                 chunks.extend(self._split_by_chars(part, token_limit))
                 current = ""
             else:
+                # 否则将part作为新的current
                 current = part
 
+        # 添加最后的current文本
         if current:
             chunks.append(current.strip())
         return chunks
@@ -169,11 +189,14 @@ class ChunkSelector:
         return chunks
 
     def _merge_small_chunks(self, chunks: Sequence[str]) -> List[str]:
+        # 过滤掉空的或只包含空白字符的chunks
         merged = [chunk for chunk in chunks if chunk.strip()]
         if not merged:
             return []
 
+        # 循环处理，直到没有小块或者只剩一个块
         while len(merged) > 1:
+            # 查找第一个token数量小于最小独立token数的chunk索引
             small_index = next(
                 (
                     index
@@ -185,8 +208,10 @@ class ChunkSelector:
             if small_index is None:
                 break
 
+            # 选择要合并的邻居chunk
             neighbor_index = self._choose_merge_neighbor(merged, small_index)
             if neighbor_index < small_index:
+                # 将较小的chunk与它的邻居合并（邻居在前面）
                 merged[neighbor_index] = (
                     merged[neighbor_index].rstrip()
                     + "\n\n"
@@ -194,6 +219,7 @@ class ChunkSelector:
                 )
                 del merged[small_index]
             else:
+                # 将较小的chunk与它的邻居合并（较小的chunk在前面）
                 merged[small_index] = (
                     merged[small_index].rstrip()
                     + "\n\n"
@@ -241,28 +267,44 @@ class ChunkSelector:
     def _select_top_n(
         self, embeddings: np.ndarray, rep_scores: np.ndarray
     ) -> tuple[List[int], List[float]]:
+        """
+        从候选嵌入中选择top-n个最相关且多样性较高的项目
+
+        使用MMR（Maximum Marginal Relevance）算法平衡代表性得分和与已选项目的差异性。
+        首先选择代表性得分最高的项目，然后迭代地选择下一个项目，使其在代表性和与已选项目差异性之间达到平衡。
+
+        Args:
+            embeddings (np.ndarray): 候选项目的嵌入向量数组，形状为(n_candidates, embedding_dim)
+            rep_scores (np.ndarray): 每个候选项目的代表性得分数组，形状为(n_candidates,)
+        """
         candidate_count = embeddings.shape[0]
+        w = self.config.mmr_lambda
         select_count = min(candidate_count, self.config.top_n)
         selected_indices: List[int] = []
         selected_scores: List[float] = []
 
+        # 迭代选择指定数量的项目
         while len(selected_indices) < select_count:
             best_index = -1
             best_score = float("-inf")
+
+            # 遍历所有候选项目以找到最佳项目
             for index in range(candidate_count):
                 if index in selected_indices:
                     continue
 
+                # 对于第一个选择，直接使用代表性得分；对于后续选择，使用MMR公式
                 if not selected_indices:
                     score = float(rep_scores[index])
                 else:
+                    # 当前候选项目与已选项目之间的最大相似度
                     max_sim_to_selected = max(
                         float(embeddings[index] @ embeddings[selected_index])
                         for selected_index in selected_indices
                     )
+                    # 使用MMR公式计算综合得分：λ * 代表性得分 - (1-λ) * 最大相似度
                     score = float(
-                        self.config.mmr_lambda * rep_scores[index]
-                        - (1.0 - self.config.mmr_lambda) * max_sim_to_selected
+                        w * rep_scores[index] - (1.0 - w) * max_sim_to_selected
                     )
 
                 if self._is_better_candidate(

@@ -52,33 +52,17 @@ def _load_chunk_selector_module():
     fake_embedding_pkg.BaseEmbeddingStrategy = base_module.BaseEmbeddingStrategy
     fake_embedding_pkg.EmbeddingStrategy = base_module.EmbeddingStrategy
 
-    selector_path = (
-        Path(__file__).resolve().parents[2]
-        / "services"
-        / "chunking"
-        / "chunk_selector.py"
-    )
+    selector_path = Path(__file__).resolve().parents[2] / "services" / "chunk_selector.py"
     selector_spec = importlib.util.spec_from_file_location(
-        "embedding.services.chunking.chunk_selector", selector_path
+        "embedding.services.chunk_selector", selector_path
     )
     selector_module = importlib.util.module_from_spec(selector_spec)
     assert selector_spec.loader is not None
 
-    original_selector_config = sys.modules.get("embedding.services.chunking.selector_config")
-    fake_selector_config = types.ModuleType("embedding.services.chunking.selector_config")
-    fake_selector_config.SelectorConfig = SelectorConfig
-
-    try:
-        sys.modules["embedding.services.chunking.selector_config"] = fake_selector_config
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setitem(sys.modules, "embedding.infra.embedding_strategies", fake_embedding_pkg)
-            mp.setitem(sys.modules, "embedding.infra.embedding_strategies.base", base_module)
-            selector_spec.loader.exec_module(selector_module)
-    finally:
-        if original_selector_config is None:
-            sys.modules.pop("embedding.services.chunking.selector_config", None)
-        else:
-            sys.modules["embedding.services.chunking.selector_config"] = original_selector_config
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setitem(sys.modules, "embedding.infra.embedding_strategies", fake_embedding_pkg)
+        mp.setitem(sys.modules, "embedding.infra.embedding_strategies.base", base_module)
+        selector_spec.loader.exec_module(selector_module)
 
     return selector_module
 
@@ -95,9 +79,11 @@ def test_chunk_selector_run_returns_ranked_top3_with_normalized_vectors():
         dtype=np.float32,
     )
     chunk_selector_module = _load_chunk_selector_module()
-    selector = chunk_selector_module.ChunkSelector(
-        embedding_strategy=mock_strategy,
-        config=SelectorConfig(top_n=3, min_independent_tokens=1, target_tokens=100),
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=mock_strategy)
+    selector.config = SelectorConfig(
+        top_n=3,
+        min_independent_tokens=1,
+        target_tokens=100,
     )
 
     selected = selector.run(
@@ -124,10 +110,8 @@ def test_chunk_selector_run_returns_ranked_top3_with_normalized_vectors():
 def test_chunk_selector_merges_small_chunk_with_better_neighbor():
     mock_strategy = Mock()
     chunk_selector_module = _load_chunk_selector_module()
-    selector = chunk_selector_module.ChunkSelector(
-        embedding_strategy=mock_strategy,
-        config=SelectorConfig(target_tokens=15, min_independent_tokens=5),
-    )
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=mock_strategy)
+    selector.config = SelectorConfig(target_tokens=15, min_independent_tokens=5)
 
     merged = selector._merge_small_chunks(
         [
@@ -147,9 +131,11 @@ def test_chunk_selector_returns_all_candidates_when_count_not_exceeding_top_n():
         dtype=np.float32,
     )
     chunk_selector_module = _load_chunk_selector_module()
-    selector = chunk_selector_module.ChunkSelector(
-        embedding_strategy=mock_strategy,
-        config=SelectorConfig(top_n=3, min_independent_tokens=1, target_tokens=100),
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=mock_strategy)
+    selector.config = SelectorConfig(
+        top_n=3,
+        min_independent_tokens=1,
+        target_tokens=100,
     )
 
     selected = selector.run("第一段。\n\n第二段。", "doc1")
@@ -163,10 +149,8 @@ def test_chunk_selector_propagates_embedding_strategy_error():
     chunk_selector_module = _load_chunk_selector_module()
     mock_strategy = Mock()
     mock_strategy.encode.side_effect = RuntimeError("boom")
-    selector = chunk_selector_module.ChunkSelector(
-        embedding_strategy=mock_strategy,
-        config=SelectorConfig(min_independent_tokens=1, target_tokens=100),
-    )
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=mock_strategy)
+    selector.config = SelectorConfig(min_independent_tokens=1, target_tokens=100)
 
     with pytest.raises(RuntimeError):
         selector.run("主题部分。主题部分。主题部分。", "doc1")

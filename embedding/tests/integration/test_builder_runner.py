@@ -124,7 +124,7 @@ def test_builder_runner_run_rewrites_outputs_without_metadata(tmp_path, caplog):
             "utc_now_iso",
             side_effect=["2026-03-27T00:00:00Z", "2026-03-27T00:00:01Z"],
         ):
-            caplog.set_level("INFO", logger=__name__)
+            caplog.set_level("INFO", logger="embedding.app.runner")
             runner = runner_module.BuilderRunner(
                 output_dir=output_dir,
                 dataset_ctx=dataset_ctx,
@@ -153,5 +153,5 @@ def test_builder_runner_run_rewrites_outputs_without_metadata(tmp_path, caplog):
     )
     assert not (output_dir / "run_metadata.json").exists()
     assert "start: model_id=test-model" in caplog.text
-    assert "end: model_id=test-model" in caplog.text
+    assert "end: start_time_utc=2026-03-27T00:00:00Z end_time_utc=2026-03-27T00:00:01Z" in caplog.text
     assert "doc_count=1 chunk_count=2 query_count=1" in caplog.text

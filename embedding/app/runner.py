@@ -44,7 +44,10 @@ class BuilderRunner:
         query_service = QueryService(self.embedding_strategy)
         queries_df = query_service.process(self.dataset_ctx.queries_path).output_df
 
-        self.output_writer.write_all_outputs(docs_df, queries_df)
+        self.output_writer.write_all_outputs(
+            docs_df=docs_df,
+            queries_df=queries_df,
+        )
 
         run_end = utc_now_iso()
         logger.info(
