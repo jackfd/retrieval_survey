@@ -2,25 +2,29 @@
 import logging
 import re
 from typing import Dict, List, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 
-from .selector_config import SelectorConfig
+
+@dataclass
+class SelectorConfig:
+    hard_max_tokens: int = 8092
+    target_tokens: int = 3200
+    min_independent_tokens: int = 500
+    top_n: int = 3
+    mmr_lambda: float = 0.7
 
 
 class ChunkSelector:
     _LIST_ITEM_PATTERN = re.compile(r"^(?:[-*−•·▪‣]|\d+[\.)。、])\s+")
     _SENTENCE_PATTERN = re.compile(r"[^。.！!?；;\n]+[。.！!?；;]?")
 
-    def __init__(
-        self,
-        embedding_strategy: EmbeddingStrategy,
-        config: SelectorConfig | None = None,
-    ):
+    def __init__(self, embedding_strategy: EmbeddingStrategy):
         self.embedding_strategy = embedding_strategy
-        self.config = config or SelectorConfig()
+        self.config = SelectorConfig()
         self.avg_char_per_token = 4
         self.logger = logging.getLogger(__name__)
 
@@ -28,7 +32,7 @@ class ChunkSelector:
         candidates = self._split_to_candidates(text)
         embeddings = self._embed_chunks(candidates)
         centroid = self._compute_centroid(embeddings)
-        rep_scores = self._compute_rep_scores(embeddings, centroid)
+        rep_scores = embeddings @ centroid
         selected_indices, selected_scores = self._select_top_n(embeddings, rep_scores)
         return self._build_records(
             doc_id=doc_id,
@@ -39,7 +43,15 @@ class ChunkSelector:
         )
 
     def _split_to_candidates(self, text: str) -> List[Dict[str, object]]:
-        paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
+        """
+        将输入文本分割成候选块列表
+        """
+        # 按照两个或多个换行符分割文本，并去除空白段落
+        paragraphs = [
+            part.strip() for part in re.split(r"\n{2,}", text) if part.strip()
+        ]
+
+        # 合并连续的列表项到同一个块中
         blocks: List[str] = []
         for paragraph in paragraphs:
             if blocks and self._LIST_ITEM_PATTERN.match(paragraph):
@@ -47,26 +59,31 @@ class ChunkSelector:
                 continue
             blocks.append(paragraph)
 
+        # 对每个块进行进一步分割
         split_chunks: List[str] = []
         for block in blocks:
             split_chunks.extend(self._split_block(block))
 
+        # 合并过小的块
         merged_chunks = self._merge_small_chunks(split_chunks)
         return [
-            {
-                "order": index + 1,
-                "text": chunk,
-            }
+            {"order": index + 1, "text": chunk}
             for index, chunk in enumerate(merged_chunks)
         ]
 
     def _split_block(self, text: str) -> List[str]:
+        """
+        将文本分割成多个块，确保每个块不超过目标token数
+        """
+        # 计算输入文本的token数量
         token_count = self._count_tokens(text)
         if token_count <= self.config.target_tokens:
             return [text]
 
+        # 按句子分割文本
         sentences = self._split_sentences(text)
         if len(sentences) <= 1:
+            # 如果只有一个句子，则使用长文本分割方法
             return self._split_long_text(text, self.config.hard_max_tokens)
 
         chunks: List[str] = []
@@ -76,6 +93,7 @@ class ChunkSelector:
             if not sentence:
                 continue
 
+            # 如果单个句子超过最大限制，则单独处理该句子
             if self._count_tokens(sentence) > self.config.hard_max_tokens:
                 if current:
                     chunks.append(current)
@@ -85,11 +103,13 @@ class ChunkSelector:
                 )
                 continue
 
+            # 尝试将当前句子与现有文本合并
             candidate = sentence if not current else current + " " + sentence
             if self._count_tokens(candidate) <= self.config.target_tokens:
                 current = candidate
                 continue
 
+            # 如果合并后超出目标长度，则保存当前文本并开始新的合并尝试
             if current:
                 chunks.append(current)
             current = sentence
@@ -97,6 +117,7 @@ class ChunkSelector:
         if current:
             chunks.append(current)
 
+        # 最终检查：确保所有块都不超过硬性最大token限制
         final_chunks: List[str] = []
         for chunk in chunks:
             if self._count_tokens(chunk) > self.config.hard_max_tokens:
@@ -108,14 +129,20 @@ class ChunkSelector:
         return final_chunks
 
     def _split_sentences(self, text: str) -> List[str]:
-        sentences = [match.group(0).strip() for match in self._SENTENCE_PATTERN.finditer(text)]
+        sentences = [
+            match.group(0).strip() for match in self._SENTENCE_PATTERN.finditer(text)
+        ]
         return [sentence for sentence in sentences if sentence]
 
     def _split_long_text(self, text: str, token_limit: int) -> List[str]:
+        """将 text 按指定的 token_limit 分割成多个部分"""
         if self._count_tokens(text) <= token_limit:
             return [text]
 
-        parts = [part.strip() for part in re.split(r"([,，:：、\s]+)", text) if part.strip()]
+        # 按标点符号和空格分割文本
+        parts = [
+            part.strip() for part in re.split(r"([,，:：、\s]+)", text) if part.strip()
+        ]
         if len(parts) <= 1:
             return self._split_by_chars(text, token_limit)
 
@@ -127,9 +154,11 @@ class ChunkSelector:
                 current = candidate
                 continue
 
+            # 当前候选超出token限制，将current加入结果并处理part
             if current:
                 chunks.append(current.strip())
             if self._count_tokens(part) > token_limit:
+                # 单个部分就超出token限制，使用字符分割方法进一步拆分
                 chunks.extend(self._split_by_chars(part, token_limit))
                 current = ""
             else:
@@ -173,12 +202,16 @@ class ChunkSelector:
             neighbor_index = self._choose_merge_neighbor(merged, small_index)
             if neighbor_index < small_index:
                 merged[neighbor_index] = (
-                    merged[neighbor_index].rstrip() + "\n\n" + merged[small_index].lstrip()
+                    merged[neighbor_index].rstrip()
+                    + "\n\n"
+                    + merged[small_index].lstrip()
                 )
                 del merged[small_index]
             else:
                 merged[small_index] = (
-                    merged[small_index].rstrip() + "\n\n" + merged[neighbor_index].lstrip()
+                    merged[small_index].rstrip()
+                    + "\n\n"
+                    + merged[neighbor_index].lstrip()
                 )
                 del merged[neighbor_index]
 
@@ -208,16 +241,14 @@ class ChunkSelector:
         )
         if embeddings.ndim != 2:
             raise ValueError("Chunk embeddings must be a 2D array")
-        return self._normalize_rows(embeddings)
+        return embeddings
 
     def _compute_centroid(self, embeddings: np.ndarray) -> np.ndarray:
         centroid = np.mean(embeddings, axis=0, dtype=np.float32)
-        return self._normalize_vector(centroid)
-
-    def _compute_rep_scores(
-        self, embeddings: np.ndarray, centroid: np.ndarray
-    ) -> np.ndarray:
-        return embeddings @ centroid
+        norm = float(np.linalg.norm(centroid))
+        if norm == 0.0:
+            return centroid
+        return centroid / norm
 
     def _select_top_n(
         self, embeddings: np.ndarray, rep_scores: np.ndarray
@@ -305,14 +336,3 @@ class ChunkSelector:
         cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
         other_chars = len(text) - cjk_chars
         return max(1, cjk_chars + other_chars // self.avg_char_per_token)
-
-    def _normalize_rows(self, vectors: np.ndarray) -> np.ndarray:
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        norms = np.where(norms == 0.0, 1.0, norms)
-        return vectors / norms
-
-    def _normalize_vector(self, vector: np.ndarray) -> np.ndarray:
-        norm = float(np.linalg.norm(vector))
-        if norm == 0.0:
-            return vector
-        return vector / norm

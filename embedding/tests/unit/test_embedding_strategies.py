@@ -14,9 +14,7 @@ def _load_base_module():
         / "embedding_strategies"
         / "base.py"
     )
-    spec = importlib.util.spec_from_file_location(
-        "_embedding_base_test", base_path
-    )
+    spec = importlib.util.spec_from_file_location("_embedding_base_test", base_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -34,7 +32,6 @@ def _make_strategy(
 
     experiment_cfg = Mock()
     experiment_cfg.embedding_dim = 384
-    experiment_cfg.normalize_embeddings = False
     experiment_cfg.max_length = 512
     experiment_cfg.query_prefix = query_prefix
     experiment_cfg.doc_prefix = doc_prefix

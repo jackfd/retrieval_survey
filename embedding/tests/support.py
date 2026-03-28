@@ -20,7 +20,6 @@ from embedding.domain.models import (
 def make_experiment_config(
     *,
     embedding_dim: int = 384,
-    normalize_embeddings: bool = False,
     max_length: int = 512,
     query_prefix: str = "",
     doc_prefix: str = "",
@@ -28,7 +27,6 @@ def make_experiment_config(
 ) -> ExperimentConfig:
     return ExperimentConfig(
         embedding_dim=embedding_dim,
-        normalize_embeddings=normalize_embeddings,
         max_length=max_length,
         query_prefix=query_prefix,
         doc_prefix=doc_prefix,
@@ -111,7 +109,9 @@ class ScriptedEmbeddingStrategy:
     ) -> None:
         self.query_vector = list(query_vector) if query_vector is not None else None
         self.doc_vectors = (
-            [list(vector) for vector in doc_vectors] if doc_vectors is not None else None
+            [list(vector) for vector in doc_vectors]
+            if doc_vectors is not None
+            else None
         )
         self.default_dim = default_dim
         self.calls: list[tuple[list[str], bool]] = []

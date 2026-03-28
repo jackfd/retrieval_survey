@@ -1,6 +1,5 @@
 experiment:
   embedding_dim: 1024
-  normalize_embeddings: true
   max_length: 8192
   query_prefix: ""
   doc_prefix: ""

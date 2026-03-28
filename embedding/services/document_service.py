@@ -6,7 +6,7 @@ import pandas as pd
 from embedding.domain.exceptions import ProcessingError
 from embedding.domain.models import ProcessResult
 from embedding.infra.jsonl_reader import JsonlReader
-from embedding.services.chunking.chunk_selector import ChunkSelector
+from embedding.services.chunk_selector import ChunkSelector
 
 
 class DocumentService:

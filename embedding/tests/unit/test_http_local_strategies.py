@@ -104,12 +104,10 @@ def _load_local_module(sentence_transformers_ctor=None, flag_ctor=None):
 def _build_experiment_cfg(
     *,
     embedding_dim: int = 384,
-    normalize_embeddings: bool = False,
     instruction_template: str = "",
 ):
     cfg = Mock()
     cfg.embedding_dim = embedding_dim
-    cfg.normalize_embeddings = normalize_embeddings
     cfg.max_length = 512
     cfg.query_prefix = ""
     cfg.doc_prefix = ""
@@ -146,16 +144,14 @@ class TestHttpEmbeddingStrategy:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.raise_for_status.return_value = None
-            mock_response.json.return_value = {
-                "vectors": [[0.1] * 384, [0.2] * 384]
-            }
+            mock_response.json.return_value = {"vectors": [[0.1] * 384, [0.2] * 384]}
             mock_post.return_value = mock_response
 
             result = strategy.encode(texts, is_query=True)
 
         assert result.shape == (2, 384)
-        assert abs(float(result[0][0]) - 0.1) < 1e-6
-        assert abs(float(result[1][0]) - 0.2) < 1e-6
+        assert np.isclose(np.linalg.norm(result[0]), 1.0)
+        assert np.isclose(np.linalg.norm(result[1]), 1.0)
         mock_post.assert_called_once()
         assert mock_post.call_args.kwargs["timeout"] == 10
         assert mock_post.call_args.kwargs["json"] == {
@@ -192,6 +188,7 @@ class TestHttpEmbeddingStrategy:
             result = strategy.encode(texts, is_query=True)
 
         assert result.shape == (5, 384)
+        assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
         assert mock_post.call_count == 3
         assert mock_post.call_args_list[0].kwargs["json"]["chunks"] == [
             "Text 1",
@@ -265,9 +262,13 @@ class TestLocalEmbeddingStrategy:
                 normalize_embeddings,
                 convert_to_numpy,
             ):
-                return np.asarray([[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32)
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
 
-        local_module = _load_local_module(sentence_transformers_ctor=DummySentenceTransformer)
+        local_module = _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        )
 
         strategy = local_module.LocalEmbeddingStrategy(
             experiment=_build_experiment_cfg(embedding_dim=4),
@@ -282,7 +283,7 @@ class TestLocalEmbeddingStrategy:
         result = strategy.encode(["hello"], is_query=True)
 
         assert result.shape == (1, 4)
-        assert abs(float(result[0][0]) - 0.1) < 1e-6
+        assert np.isclose(np.linalg.norm(result[0]), 1.0)
 
     def test_flag_embedding_provider_initializes_and_encodes(self):
         created = {}
@@ -301,18 +302,12 @@ class TestLocalEmbeddingStrategy:
                 return_sparse=None,
                 return_colbert_vecs=None,
             ):
-                return {
-                    "dense_vecs": [
-                        [3.0, 4.0, 0.0, 0.0] for _ in texts
-                    ]
-                }
+                return {"dense_vecs": [[3.0, 4.0, 0.0, 0.0] for _ in texts]}
 
         local_module = _load_local_module(flag_ctor=DummyFlagModel)
 
         strategy = local_module.LocalEmbeddingStrategy(
-            experiment=_build_experiment_cfg(
-                embedding_dim=4, normalize_embeddings=True
-            ),
+            experiment=_build_experiment_cfg(embedding_dim=4),
             inference=_build_inference_cfg(device="cuda:0", batch_size=4),
             model=Mock(provider="flag_embedding", model_id="bge-m3"),
         )
@@ -326,6 +321,61 @@ class TestLocalEmbeddingStrategy:
         assert abs(float(result[0][0]) - 0.6) < 1e-6
         assert abs(float(result[0][1]) - 0.8) < 1e-6
 
+    def test_sentence_transformers_zero_vector_is_stable(self):
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device):
+                self.max_seq_length = 0
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray([[0.0, 0.0, 0.0, 0.0] for _ in texts], dtype=np.float32)
+
+        local_module = _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        )
+
+        strategy = local_module.LocalEmbeddingStrategy(
+            experiment=_build_experiment_cfg(embedding_dim=4),
+            inference=_build_inference_cfg(device="cpu", batch_size=4),
+            model=Mock(provider="sentence_transformers", model_id="test-model-id"),
+        )
+
+        result = strategy.encode(["hello"], is_query=True)
+        assert result.shape == (1, 4)
+        assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
+
+    def test_flag_embedding_zero_vector_is_stable(self):
+        class DummyFlagModel:
+            def __init__(self, model_id, use_fp16):
+                pass
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                max_length,
+                return_dense=None,
+                return_sparse=None,
+                return_colbert_vecs=None,
+            ):
+                return {"dense_vecs": [[0.0, 0.0, 0.0, 0.0] for _ in texts]}
+
+        local_module = _load_local_module(flag_ctor=DummyFlagModel)
+        strategy = local_module.LocalEmbeddingStrategy(
+            experiment=_build_experiment_cfg(embedding_dim=4),
+            inference=_build_inference_cfg(device="cpu", batch_size=4),
+            model=Mock(provider="flag_embedding", model_id="bge-m3"),
+        )
+
+        result = strategy.encode(["hello"], is_query=False)
+        assert result.shape == (1, 4)
+        assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
+
     def test_unsupported_provider_raises_runtime_error(self):
         local_module = _load_local_module()
 
@@ -335,3 +385,29 @@ class TestLocalEmbeddingStrategy:
                 inference=_build_inference_cfg(device="cpu"),
                 model=Mock(provider="unknown", model_id="bad-model"),
             )
+
+
+def test_http_zero_vector_is_stable():
+    http_module = _load_http_module()
+    strategy = http_module.HttpEmbeddingStrategy(
+        experiment=_build_experiment_cfg(),
+        inference=Mock(
+            batch_size=2,
+            device="cpu",
+            embedding_api_url="http://test.api/embed",
+            http_timeout=10,
+            http_max_retries=0,
+        ),
+    )
+
+    with patch("requests.post") as mock_post:
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"vectors": [[0.0] * 384]}
+        mock_post.return_value = mock_response
+
+        result = strategy.encode(["hello"], is_query=False)
+
+    assert result.shape == (1, 384)
+    assert np.allclose(result[0], np.zeros(384, dtype=np.float32))

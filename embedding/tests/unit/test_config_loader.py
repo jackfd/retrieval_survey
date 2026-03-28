@@ -41,7 +41,6 @@ class TestConfigLoader:
         result = loader._parse_experiment_config({"experiment": {}})
 
         assert result.embedding_dim == 768
-        assert result.normalize_embeddings is True
         assert result.max_length == 512
         assert result.query_prefix == ""
         assert result.doc_prefix == ""
@@ -115,7 +114,6 @@ class TestConfigLoader:
             {
                 "experiment": {
                     "embedding_dim": 384,
-                    "normalize_embeddings": True,
                     "max_length": 256,
                     "query_prefix": "Q: ",
                     "doc_prefix": "D: ",

@@ -28,3 +28,11 @@ class BaseEmbeddingStrategy:
                     base = self.experiment.instruction_template + base
             prepared.append(base)
         return prepared
+
+    def _normalize_rows(self, vectors: np.ndarray) -> np.ndarray:
+        output = np.asarray(vectors, dtype=np.float32)
+        if output.ndim != 2:
+            raise ValueError("Embedding vectors must be a 2D array")
+        norms = np.linalg.norm(output, axis=1, keepdims=True)
+        norms = np.where(norms == 0.0, 1.0, norms)
+        return output / norms

@@ -8,7 +8,6 @@ import pandas as pd
 @dataclass
 class ExperimentConfig:
     embedding_dim: int
-    normalize_embeddings: bool
     max_length: int
     query_prefix: str
     doc_prefix: str

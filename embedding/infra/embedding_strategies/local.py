@@ -50,10 +50,10 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             vecs = encoder.encode(
                 prepared,
                 batch_size=int(self.inference.batch_size),
-                normalize_embeddings=bool(self.experiment.normalize_embeddings),
+                normalize_embeddings=True,
                 convert_to_numpy=True,
             )
-            output = np.asarray(vecs, dtype=np.float32)
+            output = self._normalize_rows(vecs)
             return ensure_embedding_shape(output, self.experiment.embedding_dim)
 
         if provider == "flag_embedding":
@@ -74,11 +74,7 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
                 )
 
             dense = payload.get("dense_vecs") if isinstance(payload, dict) else payload
-            output = np.asarray(dense, dtype=np.float32)
-            if self.experiment.normalize_embeddings:
-                norms = np.linalg.norm(output, axis=1, keepdims=True)
-                norms = np.where(norms == 0, 1.0, norms)
-                output = output / norms
+            output = self._normalize_rows(dense)
             return ensure_embedding_shape(output, self.experiment.embedding_dim)
 
         logger.error(

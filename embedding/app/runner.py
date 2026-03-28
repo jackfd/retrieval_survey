@@ -5,7 +5,7 @@ from embedding.domain.models import BuilderConfig, DatasetContext
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.logger import utc_now_iso
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.chunking import ChunkSelector, SelectorConfig
+from embedding.services.chunk_selector import ChunkSelector, SelectorConfig
 from embedding.services.document_service import DocumentService
 from embedding.services.query_service import QueryService
 
@@ -30,8 +30,6 @@ class BuilderRunner:
 
     def run(self) -> None:
         run_start = utc_now_iso()
-        inference = self.builder_cfg.inference
-
         logger.info(
             "start: model_id=%s resolved_dataset_dir=%s start_time_utc=%s",
             self.builder_cfg.model.model_id,
@@ -39,11 +37,8 @@ class BuilderRunner:
             run_start,
         )
 
-        selector = ChunkSelector(
-            embedding_strategy=self.embedding_strategy,
-            config=SelectorConfig(batch_size=inference.batch_size),
-        )
-        doc_service = DocumentService(selector=selector)
+        selector = ChunkSelector(self.embedding_strategy)
+        doc_service = DocumentService(selector)
         docs_df = doc_service.process(self.dataset_ctx.docs_path).output_df
 
         query_service = QueryService(self.embedding_strategy)

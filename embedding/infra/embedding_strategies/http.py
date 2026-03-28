@@ -35,9 +35,7 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     ):
                         raise ValueError("embedding response missing 'vectors' list")
 
-                    batch_vectors = np.asarray(payload["vectors"], dtype=np.float32)
-                    if batch_vectors.ndim != 2:
-                        raise ValueError("embedding vectors must be a 2D array")
+                    batch_vectors = self._normalize_rows(payload["vectors"])
                     if batch_vectors.shape[0] != len(batch):
                         raise ValueError(
                             f"embedding vector count mismatch: expected {len(batch)}, got {batch_vectors.shape[0]}"
@@ -70,10 +68,5 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
         if not vectors:
             output = np.empty((0, self.experiment.embedding_dim), dtype=np.float32)
             return ensure_embedding_shape(output, self.experiment.embedding_dim)
-        output = np.vstack(vectors)
-
-        if self.experiment.normalize_embeddings:
-            norms = np.linalg.norm(output, axis=1, keepdims=True)
-            norms = np.where(norms == 0, 1.0, norms)
-            output = output / norms
+        output = self._normalize_rows(np.vstack(vectors))
         return ensure_embedding_shape(output, self.experiment.embedding_dim)

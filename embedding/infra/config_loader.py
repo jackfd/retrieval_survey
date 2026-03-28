@@ -34,7 +34,6 @@ class ConfigLoader:
             raise ConfigError("Config key 'experiment' must be a mapping")
         return ExperimentConfig(
             embedding_dim=int(experiment_obj.get("embedding_dim", 768)),
-            normalize_embeddings=bool(experiment_obj.get("normalize_embeddings", True)),
             max_length=int(experiment_obj.get("max_length", 512)),
             query_prefix=str(experiment_obj.get("query_prefix", "")),
             doc_prefix=str(experiment_obj.get("doc_prefix", "")),
