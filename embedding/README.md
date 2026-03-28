@@ -6,9 +6,9 @@
 
 当前运行时入口：
 
-`python embedding/main.py --dataset-path <datasets_root>`
+`python embedding/main.py --dataset-path <datasets_root> --config-path model_config.yaml`
 
-该入口脚本会遍历所有已配置的模型以及固定的数据集（`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`），并生成可用于索引和评估的嵌入工件。
+该入口脚本会遍历所有已配置的模型以及固定的数据集（"hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"），并生成可用于索引和评估的嵌入工件。
 
 ## 范围
 
@@ -30,7 +30,7 @@
 1. 使用 `--dataset-path` 参数运行 `main.py`。
 2. 从 `model_config.yaml` 加载构建器配置。
 3. 初始化一个共享的本地模型缓存，路径为 `~/.cache/retrieval_survey/models`（除非通过环境变量覆盖）。
-4. 遍历固定的数据集列表：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`。
+4. 遍历固定的数据集列表："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"。
 5. 对每个数据集和模型的组合执行 `run_once(dataset, model_id)`。
 6. 当任何组合失败时，以非零状态退出。
 
@@ -43,24 +43,24 @@
 ## 命令行接口
 
 ```bash
-python embedding/main.py --dataset-path datasets
+python embedding/main.py --dataset-path datasets --config-path model_config.yaml
 ```
 
 安装后：
 
 ```bash
-embedding-build --dataset-path datasets
+embedding-build --dataset-path datasets --config-path model_config.yaml
 ```
 
 参数契约：
 
 - `--dataset-path`（必需）：数据集根目录
+- `--config-path` （必需）：配置参数文件
 
 内部固定源：
 
-- 配置文件路径：`model_config.yaml`
 - 输出根目录：`output`
-- 数据集候选项：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
+- 数据集候选项："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"
 
 模型缓存行为：
 
@@ -78,15 +78,15 @@ embedding-build --dataset-path datasets
 
 ```text
 datasets/
-├── HotpotQA/
+├── hotpotqa_distractor_v1/
 │   ├── dataset.json
 │   ├── docs.jsonl
 │   └── train/
 │       ├── queries.jsonl
 │       └── qrels.jsonl
-├── MSMARCO/
-├── SciFact/
-└── TREC-CAR/
+├── msmarco_v1/
+├── scifact_v1/
+└── trec_car_v1/
 ```
 
 每个已解析的子数据集目录必须包含 `dataset.json`、文档文件以及 `dataset.json` 中定义的训练查询文件。
@@ -100,7 +100,6 @@ output/
         ├── docs_dim<embedding_dim>.parquet
         ├── queries_dim<embedding_dim>.parquet
         ├── run_metadata.json
-        └── app.log
 ```
 
 输出路径和文件名为固定的契约接口，未经契约修订批准不得更改。

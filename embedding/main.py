@@ -1,6 +1,4 @@
 import argparse
-import logging
-import sys
 from pathlib import Path
 
 from embedding.domain.exceptions import EmbedPipeError
@@ -14,8 +12,7 @@ import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 OUTPUT_ROOT = "output"
-CONFIG_PATH = "model_config.yaml"
-DATA_SETS = ["HotpotQA", "MSMARCO", "SciFact", "TREC-CAR"]
+DATA_SETS = ["hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"]
 
 
 def run_once(
@@ -27,12 +24,9 @@ def run_once(
     model_id = builder_cfg.model.model_id
     output_dir = Path(OUTPUT_ROOT) / dataset_name / model_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    logger = setup_logger(output_dir / "app.log")
 
     dataset_loader = DatasetLoader()
-    ds_context = dataset_loader.load_dataset_context(
-        Path(dataset_root), dataset_name=dataset_name
-    )
+    ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
 
     runner = BuilderRunner(
         output_dir=output_dir,
@@ -40,22 +34,17 @@ def run_once(
         builder_cfg=builder_cfg,
         embedding_strategy=embedding_strategy,
     )
-    logger.info(
-        "start: dataset_root=%s dataset_dir=%s model_id=%s",
-        dataset_root,
-        ds_context.resolved_dataset_dir,
-        model_id,
-    )
+
     runner.run()
 
 
-def main(dataset_path: str, config_path: str = CONFIG_PATH) -> int:
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("embedding")
+def main(dataset_path: str, config_path: str) -> int:
+    logger = setup_logger(Path("./logs/app.log"))
     config_loader = ConfigLoader()
     try:
         cache_root = initialize_model_cache()
         logger.info("Using shared model cache root: %s", cache_root)
+
         all_cfg = config_loader.load_configs(Path(config_path))
         strategy_factory = EmbeddingStrategyFactory()
         strategy_cache = {}
@@ -67,7 +56,9 @@ def main(dataset_path: str, config_path: str = CONFIG_PATH) -> int:
                     builder_cfg.experiment, builder_cfg.inference, builder_cfg.model
                 )
                 strategy_cache[model_id] = embedding_strategy
+            logger.info("start model_id=%s", model_id)
             for dname in DATA_SETS:
+                logger.info("   dataset path=%s name=%s", dataset_path, dname)
                 run_once(dataset_path, dname, builder_cfg, embedding_strategy)
         return 0
     except EmbedPipeError as exc:
@@ -81,6 +72,6 @@ def main(dataset_path: str, config_path: str = CONFIG_PATH) -> int:
 def cli() -> int:
     parser = argparse.ArgumentParser(description="Build index input artifacts")
     parser.add_argument("--dataset-path", required=True)
-    parser.add_argument("--config-path", default=CONFIG_PATH)
+    parser.add_argument("--config-path", required=True)
     args = parser.parse_args()
     return main(args.dataset_path, args.config_path)

@@ -17,12 +17,13 @@ Normative keywords:
 | Argument | Required | Default | Type | Rules |
 |---|---|---|---|---|
 | `--dataset-path` | Yes | None | path | MUST exist; MUST be the `datasets/` root directory |
+| `--config-path` | Yes | None | file | MUST exist;  |
 
 Validation rules:
 
 1. Config source is fixed to `model_config.yaml`; builder configs MUST be loaded from YAML sections `experiment`, `inference`, and `models` where `models` is a non-empty list.
 2. Output root is fixed to `output`.
-3. Dataset candidates are fixed to `HotpotQA`, `MSMARCO`, `SciFact`, `TREC-CAR`.
+3. Dataset candidates are fixed to "hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1".
 4. For each dataset candidate, implementation MUST resolve sub-dataset directory under `--dataset-path` by this order:
    - exact directory name match
    - otherwise unique case-insensitive match
@@ -41,12 +42,7 @@ Validation rules:
 
 `--dataset-path` points to `datasets/` root.
 
-Current governed dataset candidates are:
-
-- `HotpotQA`
-- `MSMARCO`
-- `SciFact`
-- `TREC-CAR`
+Current governed dataset candidates are: "hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"
 
 ### 2.3 Embedding Strategy Conventions
 
@@ -167,21 +163,20 @@ Minimum required fields:
 
 ## 5. Logging Contract
 
-1. Log file path MUST be `output/<dataset_name>/<model_id>/app.log`.
-2. Every failure record in logs MUST include:
+1. Every failure record in logs MUST include:
    - exception class name
    - message text
    - related `doc_id` when available
-3. Logs SHALL include run start/end summary with counts.
-4. Business exceptions MUST be logged at the source layer before re-raising or propagating. Each such log MUST include:
+2. Logs SHALL include run start/end summary with counts.
+3. Business exceptions MUST be logged at the source layer before re-raising or propagating. Each such log MUST include:
    - function name
    - source line number
    - reason text
    - key context identifier(s) when available (for example: `doc_id`, `query_id`, `batch_index`, `path`, `model_id`)
-5. Silent exception swallowing is prohibited.
-6. If code intentionally degrades to an empty result (for example `[]` or empty vectors), it MUST emit a complete log entry at that downgrade point, including function name, line number, reason, and context.
-7. Orchestration layer (`pipeline` / `processors`) SHOULD avoid duplicate error logs when source-layer detailed logs already exist.
-8. Function and line metadata SHOULD be emitted via logger formatter configuration (for example `%(filename)s:%(lineno)d`), not via custom logging wrapper functions.
+4. Silent exception swallowing is prohibited.
+5. If code intentionally degrades to an empty result (for example `[]` or empty vectors), it MUST emit a complete log entry at that downgrade point, including function name, line number, reason, and context.
+6. Orchestration layer (`pipeline` / `processors`) SHOULD avoid duplicate error logs when source-layer detailed logs already exist.
+7. Function and line metadata SHOULD be emitted via logger formatter configuration (for example `%(filename)s:%(lineno)d`), not via custom logging wrapper functions.
 
 ## 6. Contract Change Protocol
 

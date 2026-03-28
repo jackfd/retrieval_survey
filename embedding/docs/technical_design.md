@@ -6,10 +6,10 @@
 
 当前范围：
 
-- 单一 CLI 入口：`main.py --dataset-path`
+- 单一 CLI 入口：`main.py --dataset-path --config-path model_config.yaml`
 - 在策略构建之前初始化共享的本地模型缓存
 - 遍历 `model_config.yaml` 中所有已配置的模型
-- 遍历固定的数据集候选项：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
+- 遍历固定的数据集候选项："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"
 - 一次运行一个 `(dataset, model)` 的构建
 - 在 `output/<dataset_name>/<model_id>/` 下生成确定的输出结构
 
@@ -26,8 +26,8 @@
 
 职责：
 
-1. 解析 CLI（仅 `--dataset-path`）。
-2. 通过 `ConfigLoader.load_configs(model_config.yaml)` 加载所有模型构建器配置。
+1. 解析 CLI（ `--dataset-path` 和 --config-path）。
+2. 通过 `ConfigLoader.load_configs()` 加载所有模型构建器配置。
 3. 使用固定的数据集候选项列表。
 4. 执行嵌套循环：
    - 外层：按 YAML 中的顺序遍历模型配置
@@ -38,12 +38,12 @@
 CLI 接口：
 
 - `--dataset-path`（必需）
+- --config-path （必需）
 
 内部固定源：
 
-- 配置文件路径：`model_config.yaml`
 - 输出根目录：`output`
-- 数据集：`HotpotQA`、`MSMARCO`、`SciFact`、`TREC-CAR`
+- 数据集："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"
 
 ### 3.2 支持组件
 
@@ -63,12 +63,11 @@ CLI 接口：
 
 ## 4. 运行时序列
 
-1. 解析 `--dataset-path`。
+1. 解析 `--dataset-path`和--config-path。
 2. 初始化共享的模型缓存目录。
 3. 从 `model_config.yaml` 加载模型注册表。
 4. 对于每个模型和每个固定数据集候选项：
    - 创建 `output/<dataset_name>/<model_id>/`
-   - 初始化 `app.log`
    - 使用加载的配置映射中的当前构建器配置
    - 在 `--dataset-path` 下解析数据集上下文
    - 构建嵌入策略
@@ -113,8 +112,7 @@ CLI 接口：
 1. 业务异常在传播前于源层记录日志。
 2. 日志条目包含函数名、行号、原因文本和上下文标识符。
 3. 禁止静默吞没异常。
-4. `app.log` 路径固定为 `output/<dataset_name>/<model_id>/app.log`。
-5. 编排返回码按组合快速失败：任何失败都返回非零状态码。
+4. 编排返回码按组合快速失败：任何失败都返回非零状态码。
 
 ## 7. 验证计划
 
@@ -129,7 +127,6 @@ CLI 接口：
 
 | 需求 | 契约参考 | 验证证据 |
 |---|---|---|
-| 单一 CLI 参数 `--dataset-path` | 契约第 2.1 节 | argparse + 文档检查 |
 | 固定模型配置源 | 契约第 2.1 节 | 配置加载器路径检查 |
 | 固定数据集候选项 | 契约第 2.1/2.3 节 | 编排器循环检查 |
 | 维度不超过 embedding_dim | 契约第 2.1/4 节 | 运行时维度断言 + 故障路径测试 |
