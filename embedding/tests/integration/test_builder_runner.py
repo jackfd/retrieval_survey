@@ -102,8 +102,9 @@ def test_builder_runner_run_rewrites_outputs_without_metadata(tmp_path, caplog):
 
     for module_name in [
         "embedding.app.runner",
-        "embedding.services.chunking",
-        "embedding.services.chunking.chunk_selector",
+        "embedding.services",
+        "embedding.services.chunk_selector",
+        "embedding.services.chunk_splitter",
         "embedding.services.document_service",
         "embedding.services.query_service",
         "embedding.infra.embedding_strategies",
@@ -153,5 +154,8 @@ def test_builder_runner_run_rewrites_outputs_without_metadata(tmp_path, caplog):
     )
     assert not (output_dir / "run_metadata.json").exists()
     assert "start: model_id=test-model" in caplog.text
-    assert "end: start_time_utc=2026-03-27T00:00:00Z end_time_utc=2026-03-27T00:00:01Z" in caplog.text
+    assert (
+        "end: start_time_utc=2026-03-27T00:00:00Z end_time_utc=2026-03-27T00:00:01Z"
+        in caplog.text
+    )
     assert "doc_count=1 chunk_count=2 query_count=1" in caplog.text

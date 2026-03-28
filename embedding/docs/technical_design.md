@@ -47,7 +47,7 @@
   - 根据 YAML 配置选择本地/HTTP 嵌入策略
 - `infra/model_cache.py`
   - 为下载的模型初始化稳定的缓存目录
-- `services/chunking/chunk_selector.py`
+- `services/chunk_selector.py`
   - 完成候选切分、chunk embedding、文档中心向量计算和 MMR TopN 选择
 - `app/runner.py`
   - 执行文档/查询嵌入流水线

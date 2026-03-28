@@ -4,7 +4,7 @@ from typing import Dict, List, Sequence
 import numpy as np
 
 from embedding.infra.embedding_strategies import EmbeddingStrategy
-from chunk_splitter import ChunkSplitter
+from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 
