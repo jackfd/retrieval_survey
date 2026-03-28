@@ -31,12 +31,28 @@ def test_split_to_candidates_merges_consecutive_list_items(monkeypatch: pytest.M
     splitter.min_independent_tokens = 1
 
     text = "概述段落。\n\n1. 第一项内容。\n\n2. 第二项内容。\n\n收尾段落。"
-    result = splitter.split_to_candidates(text)
+    result = splitter.split_to_candidates([text])
 
     assert result == [
         {"order": 1, "text": "概述段落。 1. 第一项内容。 2. 第二项内容。"},
         {"order": 2, "text": "收尾段落。"},
     ]
+
+
+def test_split_to_candidates_uses_sentence_list_path_without_sentence_split(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fail_offsets(_text: str):
+        raise AssertionError("sentence splitter should not be called for len(text_list) > 1")
+
+    splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fail_offsets)
+    splitter = splitter_module.ChunkSplitter()
+    splitter.target_tokens = 1
+    splitter.min_independent_tokens = 1
+
+    result = splitter.split_to_candidates([" 第一段。 ", " ", "第二段。"])
+
+    assert [item["text"] for item in result] == ["第一段。", "第二段。"]
 
 
 def test_split_sentences_uses_offsets_and_strips_whitespace(monkeypatch: pytest.MonkeyPatch):

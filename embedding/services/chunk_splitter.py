@@ -20,27 +20,20 @@ class ChunkSplitter:
         self.min_independent_tokens: int = 500
         self.avg_char_per_token = 4
 
-    def split_to_candidates(self, text: str) -> List[Dict[str, object]]:
+    def split_to_candidates(self, text: List[str]) -> List[Dict[str, object]]:
         """
         将输入文本分割成候选块列表
         """
-        # 按照两个或多个换行符分割文本，并去除空白段落
-        paragraphs = [
-            part.strip() for part in re.split(r"\n{2,}", text) if part.strip()
-        ]
+        if not isinstance(text, list):
+            raise TypeError("text must be list[str]")
+        sentences = [str(item).strip() for item in text if str(item).strip()]
+        if not sentences:
+            return []
 
-        # 合并连续的列表项到同一个块中
-        blocks: List[str] = []
-        for paragraph in paragraphs:
-            if blocks and self._LIST_ITEM_PATTERN.match(paragraph):
-                blocks[-1] += " " + paragraph
-                continue
-            blocks.append(paragraph)
-
-        # 对每个块进行进一步分割
-        split_chunks: List[str] = []
-        for block in blocks:
-            split_chunks.extend(self._split_block(block))
+        if len(sentences) == 1:
+            split_chunks = self._split_text_flow(sentences[0])
+        else:
+            split_chunks = self._chunk_from_sentences(sentences)
 
         # 合并过小的块
         merged_chunks = self._merge_small_chunks(split_chunks)
@@ -49,14 +42,24 @@ class ChunkSplitter:
             for index, chunk in enumerate(merged_chunks)
         ]
 
-    def _split_block(self, text: str) -> List[str]:
-        """
-        将文本块拆分为较小的子块，确保每个子块不超过目标token数。
+    def _split_text_flow(self, text: str) -> List[str]:
+        paragraphs = [
+            part.strip() for part in re.split(r"\n{2,}", text) if part.strip()
+        ]
 
-        首先检查整个文本的 token 数是否已低于目标值，如果超过则按句子拆分。
-        然后尝试将句子组合成不大于目标 toke n数的块。
-        对于超过硬性限制的单个句子，则使用更细粒度的方法将其拆分。
-        """
+        blocks: List[str] = []
+        for paragraph in paragraphs:
+            if blocks and self._LIST_ITEM_PATTERN.match(paragraph):
+                blocks[-1] += " " + paragraph
+                continue
+            blocks.append(paragraph)
+
+        split_chunks: List[str] = []
+        for block in blocks:
+            split_chunks.extend(self._split_block(block))
+        return split_chunks
+
+    def _split_block(self, text: str) -> List[str]:
         token_count = self._count_tokens(text)
         if token_count <= self.target_tokens:
             return [text]
@@ -64,15 +67,12 @@ class ChunkSplitter:
         sentences = self._split_sentences(text)
         if len(sentences) <= 1:
             return self._split_long_text(text, self.hard_max_tokens)
+        return self._chunk_from_sentences(sentences)
 
-        # 按句子拆分并将它们组合成合适的块
+    def _chunk_from_sentences(self, sentences: Sequence[str]) -> List[str]:
         chunks: List[str] = []
         current = ""
         for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-
             # 如果单个句子超出硬性token限制，则单独处理
             st_tokens = self._count_tokens(sentence)
             if st_tokens > self.hard_max_tokens:

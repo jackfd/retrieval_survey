@@ -72,7 +72,7 @@ def test_chunk_selector_run_returns_ranked_top_n_records(monkeypatch: pytest.Mon
         ]
     )
 
-    records = selector.run("ignored", "doc123")
+    records = selector.run(["ignored"], "doc123")
 
     assert [item["chunk_rank"] for item in records] == [1, 2, 3]
     assert [item["chunk_id"] for item in records] == ["doc123#c002", "doc123#c003", "doc123#c001"]
@@ -84,6 +84,7 @@ def test_chunk_selector_run_returns_ranked_top_n_records(monkeypatch: pytest.Mon
         ["第一段", "第二段", "第三段", "第四段"],
         is_query=False,
     )
+    selector.splitter.split_to_candidates.assert_called_once_with(["ignored"])
 
 
 def test_chunk_selector_embed_chunks_requires_2d(monkeypatch: pytest.MonkeyPatch):

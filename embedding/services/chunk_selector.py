@@ -18,7 +18,7 @@ class ChunkSelector:
         self.splitter = ChunkSplitter()
         self.avg_char_per_token = 4
 
-    def run(self, text: str, doc_id: str) -> List[Dict]:
+    def run(self, text: List[str], doc_id: str) -> List[Dict]:
         candidates = self.splitter.split_to_candidates(text)
         embeddings = self._embed_chunks(candidates)
         centroid = self._compute_centroid(embeddings)

@@ -132,8 +132,7 @@ def build_docs(
                 if sentence_text:
                     abstract_sentences.append(sentence_text)
 
-            doc_text = title + "\n" + " ".join(abstract_sentences)
-            if not doc_text.strip():
+            if len(abstract_sentences) == 0:
                 skipped += 1
                 log_issue(
                     log_records,
@@ -160,7 +159,9 @@ def build_docs(
                 continue
 
             doc_ids.add(doc_id)
-            write_jsonl_record(fout, {"doc_id": doc_id, "doc_text": doc_text})
+            write_jsonl_record(
+                fout, {"doc_id": doc_id, "title": title, "doc_text": abstract_sentences}
+            )
             written += 1
 
     return written, doc_ids, skipped

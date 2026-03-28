@@ -108,7 +108,43 @@ def test_document_service_process_returns_selected_chunk():
     assert list(result.output_df["chunk_vector"]) == [[1.0, 0.0, 0.0, 0.0]]
     assert list(result.output_df["chunk_score"]) == [0.9]
     assert list(result.output_df["chunk_rank"]) == [1]
-    selector.run.assert_called_once_with("主题部分。主题部分。主题部分。", "d1")
+    selector.run.assert_called_once_with(["主题部分。主题部分。主题部分。"], "d1")
+
+
+def test_document_service_process_normalizes_list_doc_text():
+    document_module, _ = _load_service_modules()
+    selector = Mock()
+    selector.run.return_value = []
+    service = document_module.DocumentService(selector=selector)
+    service.jsonl_reader = Mock(
+        read_objects=Mock(
+            return_value=[
+                (
+                    1,
+                    {
+                        "doc_id": "d1",
+                        "doc_text": ["  第一段。", "", " 第二段。 "],
+                    },
+                )
+            ]
+        )
+    )
+
+    service.process(Path("docs.jsonl"))
+
+    selector.run.assert_called_once_with(["第一段。", "第二段。"], "d1")
+
+
+def test_document_service_rejects_invalid_doc_text_type():
+    document_module, _ = _load_service_modules()
+    selector = Mock()
+    service = document_module.DocumentService(selector=selector)
+    service.jsonl_reader = Mock(
+        read_objects=Mock(return_value=[(1, {"doc_id": "d1", "doc_text": {"x": 1}})])
+    )
+
+    with pytest.raises(ProcessingError):
+        service.process(Path("docs.jsonl"))
 
 
 def test_document_service_rejects_empty_doc_fields():
