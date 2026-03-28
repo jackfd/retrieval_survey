@@ -12,7 +12,7 @@ import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 OUTPUT_ROOT = "output"
-DATA_SETS = ["hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"]
+DATA_SETS = ["scifact_v1", "hotpotqa_distractor_v1", "msmarco_v1", "trec_car_v1"]
 
 
 def run_once(
@@ -22,7 +22,7 @@ def run_once(
     embedding_strategy,
 ):
     model_id = builder_cfg.model.model_id
-    output_dir = Path(OUTPUT_ROOT) / dataset_name / model_id
+    output_dir = Path(OUTPUT_ROOT) / model_id / dataset_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_loader = DatasetLoader()

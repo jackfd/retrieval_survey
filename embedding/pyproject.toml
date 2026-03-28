@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "retrieval-embedding"
-version = "0.1.0"
+version = "0.1.1"
 description = "Index input pipeline for embedding artifacts."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT" 
 authors = [
-  { name = "Unknown", email = "unknown@example.com" }
+  { name = "jack", email = "jack@example.com" }
 ]
 dependencies = [
   "blingfire>=0.1.8",
@@ -32,7 +32,7 @@ flag = [
 ]
 
 [project.scripts]
-embedding-build = "embedding.main:cli"
+retrieval-embedding= "embedding.main:cli"
 
 [tool.setuptools]
 packages = [

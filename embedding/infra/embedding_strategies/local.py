@@ -66,6 +66,10 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
                     return_colbert_vecs=False,
                 )
             except TypeError:
+                logger.info(
+                    "FlagEmbedding model=%s does not support dense_vecs",
+                    self.model.model_id,
+                )
                 payload = encoder.encode(
                     prepared,
                     batch_size=int(self.inference.batch_size),

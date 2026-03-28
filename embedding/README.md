@@ -49,7 +49,7 @@ python embedding/main.py --dataset-path datasets --config-path model_config.yaml
 安装后：
 
 ```bash
-embedding-build --dataset-path datasets --config-path model_config.yaml
+retrieval-embedding --dataset-path datasets --config-path model_config.yaml
 ```
 
 参数契约：

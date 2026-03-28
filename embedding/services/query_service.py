@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from embedding.domain.exceptions import ProcessingError
-from embedding.domain.models import ProcessResult
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.jsonl_reader import JsonlReader
 
@@ -20,7 +19,7 @@ class QueryService:
         self.embedding_strategy = embedding_strategy
         self.jsonl_reader = JsonlReader()
 
-    def process(self, queries_path: Path) -> ProcessResult:
+    def process(self, queries_path: Path) -> pd.DataFrame:
         records: List[Dict[str, Any]] = []
         query_counts = 0
         elapsed_sec = 0.0
@@ -75,7 +74,7 @@ class QueryService:
         df = pd.DataFrame(
             records, columns=["query_id", "query_text", "query_embedding"]
         )
-        return ProcessResult(output_df=df)
+        return df
 
 
 def log_query_embedding_timing(

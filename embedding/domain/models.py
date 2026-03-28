@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
-import pandas as pd
-
 
 @dataclass
 class ExperimentConfig:
@@ -44,8 +42,3 @@ class DatasetContext:
     dataset_meta: Dict[str, Any]
     docs_path: Path
     queries_path: Path
-
-
-@dataclass
-class ProcessResult:
-    output_df: pd.DataFrame

@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 import pandas as pd
 
 from embedding.domain.exceptions import ProcessingError
-from embedding.domain.models import ProcessResult
 from embedding.infra.jsonl_reader import JsonlReader
 from embedding.services.chunk_selector import ChunkSelector
 
@@ -19,7 +18,7 @@ class DocumentService:
         self.selector = selector
         self.jsonl_reader = JsonlReader()
 
-    def process(self, docs_path: Path) -> ProcessResult:
+    def process(self, docs_path: Path) -> pd.DataFrame:
         doc_records: List[Dict[str, Any]] = []
         doc_counts = 0
         elapsed_sec = 0.0
@@ -43,7 +42,7 @@ class DocumentService:
                 selected = self.selector.run(doc_text, doc_id)
                 doc_elapsed_sec = perf_counter() - doc_start
             except Exception as exc:
-                self.logger.exception(
+                logger.exception(
                     "Document chunk selection failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
                     docs_path,
                     line_num,
@@ -78,7 +77,7 @@ class DocumentService:
             ],
         )
         self.selector.flush_embedding_timing()
-        return ProcessResult(output_df=docs_df)
+        return docs_df
 
     def _normalize_doc_text(self, value: Any) -> List[str]:
         if isinstance(value, str):

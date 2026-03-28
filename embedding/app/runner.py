@@ -39,15 +39,12 @@ class BuilderRunner:
 
         selector = ChunkSelector(self.embedding_strategy)
         doc_service = DocumentService(selector)
-        docs_df = doc_service.process(self.dataset_ctx.docs_path).output_df
+        docs_df = doc_service.process(self.dataset_ctx.docs_path)
+        self.output_writer.write_docs(docs_df)
 
         query_service = QueryService(self.embedding_strategy)
-        queries_df = query_service.process(self.dataset_ctx.queries_path).output_df
-
-        self.output_writer.write_all_outputs(
-            docs_df=docs_df,
-            queries_df=queries_df,
-        )
+        queries_df = query_service.process(self.dataset_ctx.queries_path)
+        self.output_writer.write_queries(queries_df)
 
         run_end = utc_now_iso()
         logger.info(
