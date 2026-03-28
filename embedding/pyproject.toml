@@ -13,6 +13,7 @@ authors = [
   { name = "Unknown", email = "unknown@example.com" }
 ]
 dependencies = [
+  "blingfire>=0.1.8",
   "numpy>=1.23",
   "requests>=2.31",
   "PyYAML>=6.0",

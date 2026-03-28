@@ -52,7 +52,9 @@ def _load_chunk_selector_module():
     fake_embedding_pkg.BaseEmbeddingStrategy = base_module.BaseEmbeddingStrategy
     fake_embedding_pkg.EmbeddingStrategy = base_module.EmbeddingStrategy
 
-    selector_path = Path(__file__).resolve().parents[2] / "services" / "chunk_selector.py"
+    selector_path = (
+        Path(__file__).resolve().parents[2] / "services" / "chunk_selector.py"
+    )
     selector_spec = importlib.util.spec_from_file_location(
         "embedding.services.chunk_selector", selector_path
     )
@@ -60,8 +62,12 @@ def _load_chunk_selector_module():
     assert selector_spec.loader is not None
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setitem(sys.modules, "embedding.infra.embedding_strategies", fake_embedding_pkg)
-        mp.setitem(sys.modules, "embedding.infra.embedding_strategies.base", base_module)
+        mp.setitem(
+            sys.modules, "embedding.infra.embedding_strategies", fake_embedding_pkg
+        )
+        mp.setitem(
+            sys.modules, "embedding.infra.embedding_strategies.base", base_module
+        )
         selector_spec.loader.exec_module(selector_module)
 
     return selector_module
@@ -166,16 +172,6 @@ def test_split_sentences_basic():
     assert result == ["这是第一句。", "这是第二句。", "这是第三句。"]
 
 
-def test_split_sentences_with_different_punctuation():
-    chunk_selector_module = _load_chunk_selector_module()
-    selector = chunk_selector_module.ChunkSelector(embedding_strategy=Mock())
-
-    text = "这是第一句。这是第二句!这是第三句?这是第四句."
-    result = selector._split_sentences(text)
-
-    assert result == ["这是第一句。", "这是第二句!", "这是第三句?", "这是第四句."]
-
-
 def test_split_sentences_with_english_punctuation():
     chunk_selector_module = _load_chunk_selector_module()
     selector = chunk_selector_module.ChunkSelector(embedding_strategy=Mock())
@@ -201,15 +197,18 @@ def test_split_sentences_with_semicolon_and_newlines():
     assert result == ["这是第一句;这是第二句。", "这是第三句。", "这是第四句。"]
 
 
-def test_split_block_uses_semicolon_as_soft_boundary_when_over_target():
+def test_split_to_candidates_preserves_paragraph_and_list_structure():
     chunk_selector_module = _load_chunk_selector_module()
     selector = chunk_selector_module.ChunkSelector(embedding_strategy=Mock())
-    selector.config = SelectorConfig(target_tokens=8, hard_max_tokens=100)
+    selector.config = SelectorConfig(target_tokens=100, min_independent_tokens=1)
 
-    text = "甲甲甲甲甲甲甲甲甲甲；乙乙乙乙乙乙乙乙乙乙。"
-    chunks = selector._split_block(text)
+    text = "概述段落。\n\n1. 第一项内容。\n\n2. 第二项内容。\n\n收尾段落。"
+    result = selector._split_to_candidates(text)
 
-    assert chunks == ["甲甲甲甲甲甲甲甲甲甲；", "乙乙乙乙乙乙乙乙乙乙。"]
+    assert result == [
+        {"order": 1, "text": "概述段落。 1. 第一项内容。 2. 第二项内容。"},
+        {"order": 2, "text": "收尾段落。"},
+    ]
 
 
 def test_split_sentences_empty_and_whitespace():
@@ -265,8 +264,6 @@ def test_split_sentences_english_with_numbers_and_periods():
 
     text = "The cost was $19.99. This is another sentence! Chapter 3.1 discusses this topic? Yes indeed."
     result = selector._split_sentences(text)
-    print(result)
-    # The regex splits on punctuation, so periods in numbers like $19.99 are still sentence terminators
     expected = [
         "The cost was $19.99.",
         "This is another sentence!",
@@ -283,8 +280,6 @@ def test_split_sentences_english_complex_sentences():
     # Complex English sentences with abbreviations and decimal numbers
     text = "Dr. Smith went to the U.S.A. last week. He bought 2.5 kg of apples for $3.99! What did he do next? He continued his research; the experiment was ongoing."
     result = selector._split_sentences(text)
-    print(result)
-    # Due to the regex pattern, every punctuation mark (including periods in abbreviations) acts as a sentence boundary
     expected = [
         "Dr. Smith went to the U.S.A. last week.",
         "He bought 2.5 kg of apples for $3.99!",
@@ -329,6 +324,26 @@ def test_split_sentences_english_with_newlines():
     ]
 
     assert result == expected
+
+
+def test_split_sentences_uses_original_text_offsets():
+    chunk_selector_module = _load_chunk_selector_module()
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=Mock())
+
+    text = "A.  B\n\nC?  D"
+    result = selector._split_sentences(text)
+
+    assert result == ["A.  B\n\nC?", "D"]
+
+
+def test_split_sentences_strips_whitespace_from_offset_slices():
+    chunk_selector_module = _load_chunk_selector_module()
+    selector = chunk_selector_module.ChunkSelector(embedding_strategy=Mock())
+
+    text = "  Leading. Trailing?  "
+    result = selector._split_sentences(text)
+
+    assert result == ["Leading.", "Trailing?"]
 
 
 def test_split_sentences_very_long_english_text():

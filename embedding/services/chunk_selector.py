@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Sequence
 from dataclasses import dataclass
 import numpy as np
+from blingfire import text_to_sentences_and_offsets
 
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 
@@ -21,7 +22,6 @@ class SelectorConfig:
 
 class ChunkSelector:
     _LIST_ITEM_PATTERN = re.compile(r"^(?:[-*−•·▪‣]|\d+[\.)。、])\s+")
-    _SENTENCE_PATTERN = re.compile(r"[^。.！!?；;\n]+[。.！!?；;]?")
 
     def __init__(self, embedding_strategy: EmbeddingStrategy):
         self.embedding_strategy = embedding_strategy
@@ -133,9 +133,15 @@ class ChunkSelector:
         return final_chunks
 
     def _split_sentences(self, text: str) -> List[str]:
-        sentences = [
-            match.group(0).strip() for match in self._SENTENCE_PATTERN.finditer(text)
-        ]
+        stripped = text.strip()
+        if not stripped:
+            return []
+
+        _, offsets = text_to_sentences_and_offsets(text)
+        if not offsets:
+            return [stripped]
+
+        sentences = [text[start:end].strip() for start, end in offsets]
         return [sentence for sentence in sentences if sentence]
 
     def _split_long_text(self, text: str, token_limit: int) -> List[str]:
