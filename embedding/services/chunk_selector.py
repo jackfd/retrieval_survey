@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+from time import perf_counter
 from typing import Dict, List, Sequence
 import numpy as np
 
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChunkSelector:
+    LOG_EVERY_N = 1000
 
     def __init__(self, embedding_strategy: EmbeddingStrategy):
         self.embedding_strategy = embedding_strategy
@@ -17,6 +19,8 @@ class ChunkSelector:
         self.mmr_lambda: float = 0.7
         self.splitter = ChunkSplitter()
         self.avg_char_per_token = 4
+        self._embed_chunk_count_window = 0
+        self._embed_elapsed_window_sec = 0.0
 
     def run(self, text: List[str], doc_id: str) -> List[Dict]:
         candidates = self.splitter.split_to_candidates(text)
@@ -34,13 +38,31 @@ class ChunkSelector:
 
     def _embed_chunks(self, candidates: Sequence[Dict[str, object]]) -> np.ndarray:
         texts = [str(candidate["text"]) for candidate in candidates]
+        embed_start = perf_counter()
         embeddings = np.asarray(
             self.embedding_strategy.encode(texts, is_query=False),
             dtype=np.float32,
         )
+        elapsed_sec = perf_counter() - embed_start
+        self._embed_chunk_count_window += len(texts)
+        self._embed_elapsed_window_sec += elapsed_sec
+        if self._embed_chunk_count_window >= self.LOG_EVERY_N:
+            self._log_embedding_timing()
         if embeddings.ndim != 2:
             raise ValueError("Chunk embeddings must be a 2D array")
         return self._normalize_rows(embeddings)
+
+    def flush_embedding_timing(self) -> None:
+        if self._embed_chunk_count_window > 0:
+            self._log_embedding_timing()
+
+    def _log_embedding_timing(self) -> None:
+        chunks = self._embed_chunk_count_window
+        elapsed_sec = self._embed_elapsed_window_sec
+        avg_ms = (elapsed_sec * 1000.0 / chunks) if chunks > 0 else 0.0
+        logger.info("chunk embedding: chunks=%s avg_ms=%.3f", chunks, avg_ms)
+        self._embed_chunk_count_window = 0
+        self._embed_elapsed_window_sec = 0.0
 
     def _compute_centroid(self, embeddings: np.ndarray) -> np.ndarray:
         centroid = np.mean(embeddings, axis=0, dtype=np.float32)
