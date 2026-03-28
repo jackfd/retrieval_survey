@@ -92,183 +92,35 @@ def load_samples(
     return data
 
 
-def clean_sentences(sentences_value: Any) -> List[str]:
-    if not isinstance(sentences_value, list):
-        return []
-
-    cleaned = []
-    for sentence in sentences_value:
-        sentence_text = normalize_text(sentence)
-        if sentence_text:
-            cleaned.append(sentence_text)
-    return cleaned
-
-
-def build_global_docs(
-    input_files: List[Tuple[Path, str]],
-    output_file: Path,
-    log_records: List[dict],
-    error_counter: Counter,
-) -> Dict[str, int]:
-    seen_doc_ids: Set[str] = set()
-    doc_payload_by_id: Dict[str, Dict[str, Any]] = {}
-
-    doc_count = 0
-    skipped_doc_count = 0
-    conflicting_doc_count = 0
-
-    for input_file, split in input_files:
-        samples = load_samples(input_file, split, log_records, error_counter)
-
-        for line_num, sample in enumerate(samples, 1):
-            if not isinstance(sample, dict):
-                continue
-
-            context_value = sample.get("context")
-            query_id = normalize_text(sample.get("_id"))
-
-            if not isinstance(context_value, list):
-                log_issue(
-                    log_records,
-                    error_counter,
-                    file=input_file,
-                    line_num=line_num,
-                    issue_type="invalid_context_format",
-                    record_type="doc",
-                    record_id=query_id,
-                    split=split,
-                    detail=f"type={type(context_value).__name__}",
-                )
-                continue
-
-            for context_idx, context_entry in enumerate(context_value, 1):
-                if not isinstance(context_entry, list) or len(context_entry) != 2:
-                    skipped_doc_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="invalid_context_entry_format",
-                        record_type="doc",
-                        record_id=query_id,
-                        split=split,
-                        detail=f"context_idx={context_idx}",
-                    )
-                    continue
-
-                title = normalize_text(context_entry[0])
-                sentences_value = context_entry[1]
-
-                if not title:
-                    skipped_doc_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="missing_doc_title",
-                        record_type="doc",
-                        record_id=query_id,
-                        split=split,
-                        detail=f"context_idx={context_idx}",
-                    )
-                    continue
-
-                if not isinstance(sentences_value, list):
-                    skipped_doc_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="invalid_context_sentences_format",
-                        record_type="doc",
-                        record_id=title,
-                        split=split,
-                        detail=f"type={type(sentences_value).__name__}",
-                    )
-                    continue
-
-                cleaned_sentences = clean_sentences(sentences_value)
-                if not cleaned_sentences:
-                    skipped_doc_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="empty_doc_sentences",
-                        record_type="doc",
-                        record_id=title,
-                        split=split,
-                    )
-                    continue
-
-                doc_id = title
-                new_payload = {
-                    "doc_id": doc_id,
-                    "title": title,
-                    "doc_text": cleaned_sentences,
-                }
-
-                if doc_id not in seen_doc_ids:
-                    seen_doc_ids.add(doc_id)
-                    doc_payload_by_id[doc_id] = new_payload
-                    doc_count += 1
-                    continue
-
-                existing_payload = doc_payload_by_id[doc_id]
-                if existing_payload["doc_text"] != cleaned_sentences:
-                    conflicting_doc_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="conflicting_doc_content_same_title",
-                        action="keep_first",
-                        record_type="doc",
-                        record_id=doc_id,
-                        split=split,
-                        detail="same title mapped to different sentence lists",
-                    )
-
-    with output_file.open("w", encoding="utf-8") as fout:
-        for doc_id in sorted(doc_payload_by_id.keys()):
-            write_jsonl_record(fout, doc_payload_by_id[doc_id])
-
-    return {
-        "doc_count": doc_count,
-        "skipped_doc_count": skipped_doc_count,
-        "conflicting_doc_count": conflicting_doc_count,
-    }
-
-
 def build_split(
     input_file: Path,
     split: str,
     output_dir: Path,
-    global_doc_ids: Set[str],
     log_records: List[dict],
     error_counter: Counter,
 ) -> Dict[str, int]:
     samples = load_samples(input_file, split, log_records, error_counter)
 
     seen_query_ids: Set[str] = set()
-    seen_qrel_pairs: Set[Tuple[str, str]] = set()
+    seen_doc_ids: Set[str] = set()
+    seen_qrel_pairs: Dict[Tuple[str, str], int] = {}
     positive_query_ids: Set[str] = set()
 
     query_count = 0
+    doc_count = 0
     qrels_count = 0
+
     skipped_query_count = 0
+    skipped_doc_count = 0
     skipped_qrels_count = 0
 
     queries_path = output_dir / "queries.jsonl"
+    docs_path = output_dir / "docs.jsonl"
     qrels_path = output_dir / "qrels.jsonl"
 
     with (
         queries_path.open("w", encoding="utf-8") as query_fout,
+        docs_path.open("w", encoding="utf-8") as docs_fout,
         qrels_path.open("w", encoding="utf-8") as qrels_fout,
     ):
         for line_num, sample in enumerate(samples, 1):
@@ -334,11 +186,121 @@ def build_split(
             query_count += 1
             write_jsonl_record(
                 query_fout,
-                {
-                    "query_id": query_id,
-                    "query_text": query_text,
-                },
+                {"query_id": query_id, "query_text": query_text},
             )
+
+            context_value = sample.get("context")
+            if not isinstance(context_value, list):
+                log_issue(
+                    log_records,
+                    error_counter,
+                    file=input_file,
+                    line_num=line_num,
+                    issue_type="invalid_context_format",
+                    record_type="doc",
+                    record_id=query_id,
+                    split=split,
+                    detail=f"type={type(context_value).__name__}",
+                )
+                context_value = []
+
+            valid_doc_ids_for_query: Set[str] = set()
+            for context_idx, context_entry in enumerate(context_value, 1):
+                if not isinstance(context_entry, list) or len(context_entry) != 2:
+                    skipped_doc_count += 1
+                    log_issue(
+                        log_records,
+                        error_counter,
+                        file=input_file,
+                        line_num=line_num,
+                        issue_type="invalid_context_entry_format",
+                        record_type="doc",
+                        record_id=query_id,
+                        split=split,
+                        detail=f"context_idx={context_idx}",
+                    )
+                    continue
+
+                title = normalize_text(context_entry[0])
+                sentences_value = context_entry[1]
+
+                if not title:
+                    skipped_doc_count += 1
+                    log_issue(
+                        log_records,
+                        error_counter,
+                        file=input_file,
+                        line_num=line_num,
+                        issue_type="missing_doc_title",
+                        record_type="doc",
+                        record_id=query_id,
+                        split=split,
+                        detail=f"context_idx={context_idx}",
+                    )
+                    continue
+
+                if not isinstance(sentences_value, list):
+                    skipped_doc_count += 1
+                    log_issue(
+                        log_records,
+                        error_counter,
+                        file=input_file,
+                        line_num=line_num,
+                        issue_type="invalid_context_sentences_format",
+                        record_type="doc",
+                        record_id=f"{query_id}::{title}",
+                        split=split,
+                        detail=f"type={type(sentences_value).__name__}",
+                    )
+                    continue
+
+                cleaned_sentences = []
+                for sentence in sentences_value:
+                    sentence_text = normalize_text(sentence)
+                    if sentence_text:
+                        cleaned_sentences.append(sentence_text)
+
+                if not cleaned_sentences:
+                    skipped_doc_count += 1
+                    log_issue(
+                        log_records,
+                        error_counter,
+                        file=input_file,
+                        line_num=line_num,
+                        issue_type="empty_doc_sentences",
+                        record_type="doc",
+                        record_id=f"{query_id}::{title}",
+                        split=split,
+                    )
+                    continue
+
+                doc_id = f"{query_id}::{title}"
+                if doc_id in seen_doc_ids:
+                    skipped_doc_count += 1
+                    log_issue(
+                        log_records,
+                        error_counter,
+                        file=input_file,
+                        line_num=line_num,
+                        issue_type="duplicate_doc_id",
+                        record_type="doc",
+                        record_id=doc_id,
+                        split=split,
+                    )
+                    continue
+
+                seen_doc_ids.add(doc_id)
+                valid_doc_ids_for_query.add(doc_id)
+                doc_count += 1
+
+                write_jsonl_record(
+                    docs_fout,
+                    {
+                        "doc_id": doc_id,
+                        "title": title,
+                        "doc_text": cleaned_sentences,
+                    },
+                )
 
             supporting_facts_value = sample.get("supporting_facts")
             if not isinstance(supporting_facts_value, list):
@@ -392,39 +354,54 @@ def build_split(
 
             wrote_positive_qrel = False
             for title in supporting_titles:
-                doc_id = title
+                doc_id = f"{query_id}::{title}"
                 pair = (query_id, doc_id)
 
-                if doc_id not in global_doc_ids:
+                if doc_id not in valid_doc_ids_for_query:
                     skipped_qrels_count += 1
                     log_issue(
                         log_records,
                         error_counter,
                         file=input_file,
                         line_num=line_num,
-                        issue_type="missing_supporting_doc_in_global_docs",
+                        issue_type="missing_supporting_doc_in_context",
                         record_type="qrel",
-                        record_id=f"{query_id}::{doc_id}",
+                        record_id=f"{query_id}::{title}",
                         split=split,
                     )
                     continue
 
                 if pair in seen_qrel_pairs:
-                    skipped_qrels_count += 1
-                    log_issue(
-                        log_records,
-                        error_counter,
-                        file=input_file,
-                        line_num=line_num,
-                        issue_type="duplicate_qrel_same_relevance",
-                        record_type="qrel",
-                        record_id=f"{query_id}::{doc_id}",
-                        split=split,
-                        detail="1",
-                    )
+                    existing_rel = seen_qrel_pairs[pair]
+                    if existing_rel == 1:
+                        skipped_qrels_count += 1
+                        log_issue(
+                            log_records,
+                            error_counter,
+                            file=input_file,
+                            line_num=line_num,
+                            issue_type="duplicate_qrel_same_relevance",
+                            record_type="qrel",
+                            record_id=f"{query_id}::{title}",
+                            split=split,
+                            detail="1",
+                        )
+                    else:
+                        skipped_qrels_count += 1
+                        log_issue(
+                            log_records,
+                            error_counter,
+                            file=input_file,
+                            line_num=line_num,
+                            issue_type="duplicate_qrel_conflicting_relevance",
+                            record_type="qrel",
+                            record_id=f"{query_id}::{title}",
+                            split=split,
+                            detail=f"existing={existing_rel}, new=1",
+                        )
                     continue
 
-                seen_qrel_pairs.add(pair)
+                seen_qrel_pairs[pair] = 1
                 qrels_count += 1
                 wrote_positive_qrel = True
                 write_jsonl_record(
@@ -441,10 +418,12 @@ def build_split(
 
     orphan_query_count = query_count - len(positive_query_ids)
     return {
+        "doc_count": doc_count,
         "query_count": query_count,
         "qrels_count": qrels_count,
         "positive_query_count": len(positive_query_ids),
         "orphan_query_count": orphan_query_count,
+        "skipped_doc_count": skipped_doc_count,
         "skipped_query_count": skipped_query_count,
         "skipped_qrels_count": skipped_qrels_count,
     }
@@ -456,13 +435,14 @@ def write_dataset_json(output_file: Path, stats: Dict) -> None:
         "version": "v1",
         "subset": "distractor",
         "task": "doc_retrieval",
-        "docs_file": "docs.jsonl",
         "splits": {
             "train": {
+                "docs_file": "train/docs.jsonl",
                 "queries_file": "train/queries.jsonl",
                 "qrels_file": "train/qrels.jsonl",
             },
             "dev": {
+                "docs_file": "dev/docs.jsonl",
                 "queries_file": "dev/queries.jsonl",
                 "qrels_file": "dev/qrels.jsonl",
             },
@@ -496,38 +476,20 @@ def write_build_log(
         json.dump(payload, fout, ensure_ascii=False, indent=2)
 
 
-def load_global_doc_ids(docs_file: Path) -> Set[str]:
-    doc_ids: Set[str] = set()
-    with docs_file.open("r", encoding="utf-8") as fin:
-        for line in fin:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            doc_id = normalize_text(record.get("doc_id"))
-            if doc_id:
-                doc_ids.add(doc_id)
-    return doc_ids
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build HotpotQA distractor benchmark layout with a global shared document corpus."
+        description="Build HotpotQA distractor benchmark layout in weak-validation mode."
     )
     parser.add_argument(
-        "--input-dir",
-        default=".",
-        help="Directory containing HotpotQA JSON files.",
+        "--input-dir", default=".", help="Directory containing HotpotQA JSON files."
     )
     parser.add_argument(
         "--output-dir",
-        default="hotpotqa_distractor_v1_global",
+        default="hotpotqa_distractor_v1",
         help="Output benchmark directory.",
     )
     parser.add_argument(
-        "--train-file",
-        default="hotpot_train_v1.1.json",
-        help="Train JSON file name.",
+        "--train-file", default="hotpot_train_v1.1.json", help="Train JSON file name."
     )
     parser.add_argument(
         "--dev-file",
@@ -554,20 +516,10 @@ def main() -> None:
     log_records: List[dict] = []
     error_counter: Counter = Counter()
 
-    docs_stats = build_global_docs(
-        input_files=[(train_input, "train"), (dev_input, "dev")],
-        output_file=output_dir / "docs.jsonl",
-        log_records=log_records,
-        error_counter=error_counter,
-    )
-
-    global_doc_ids = load_global_doc_ids(output_dir / "docs.jsonl")
-
     train_stats = build_split(
         input_file=train_input,
         split="train",
         output_dir=output_dir / "train",
-        global_doc_ids=global_doc_ids,
         log_records=log_records,
         error_counter=error_counter,
     )
@@ -575,25 +527,23 @@ def main() -> None:
         input_file=dev_input,
         split="dev",
         output_dir=output_dir / "dev",
-        global_doc_ids=global_doc_ids,
         log_records=log_records,
         error_counter=error_counter,
     )
 
     stats = {
-        "docs": docs_stats,
         "train": train_stats,
         "dev": dev_stats,
         "overall": {
-            "doc_count": docs_stats["doc_count"],
+            "doc_count": train_stats["doc_count"] + dev_stats["doc_count"],
             "query_count": train_stats["query_count"] + dev_stats["query_count"],
             "qrels_count": train_stats["qrels_count"] + dev_stats["qrels_count"],
             "positive_query_count": train_stats["positive_query_count"]
             + dev_stats["positive_query_count"],
             "orphan_query_count": train_stats["orphan_query_count"]
             + dev_stats["orphan_query_count"],
-            "skipped_doc_count": docs_stats["skipped_doc_count"],
-            "conflicting_doc_count": docs_stats["conflicting_doc_count"],
+            "skipped_doc_count": train_stats["skipped_doc_count"]
+            + dev_stats["skipped_doc_count"],
             "skipped_query_count": train_stats["skipped_query_count"]
             + dev_stats["skipped_query_count"],
             "skipped_qrels_count": train_stats["skipped_qrels_count"]
