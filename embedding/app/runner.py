@@ -5,11 +5,11 @@ from embedding.domain.models import BuilderConfig, DatasetContext
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.logger import utc_now_iso
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.chunk_selector import ChunkSelector, SelectorConfig
+from embedding.services.chunk_selector import ChunkSelector
 from embedding.services.document_service import DocumentService
 from embedding.services.query_service import QueryService
 
-logger = logging.getLogger("embedding")
+logger = logging.getLogger(__name__)
 
 
 class BuilderRunner:
@@ -44,16 +44,11 @@ class BuilderRunner:
         query_service = QueryService(self.embedding_strategy)
         queries_df = query_service.process(self.dataset_ctx.queries_path).output_df
 
-        self.output_writer.write_all_outputs(
-            docs_df=docs_df,
-            queries_df=queries_df,
-        )
+        self.output_writer.write_all_outputs(docs_df, queries_df)
 
         run_end = utc_now_iso()
         logger.info(
-            "end: model_id=%s resolved_dataset_dir=%s start_time_utc=%s end_time_utc=%s doc_count=%s chunk_count=%s query_count=%s",
-            self.builder_cfg.model.model_id,
-            self.dataset_ctx.resolved_dataset_dir,
+            "end: start_time_utc=%s end_time_utc=%s doc_count=%s chunk_count=%s query_count=%s",
             run_start,
             run_end,
             docs_df["doc_id"].nunique() if not docs_df.empty else 0,

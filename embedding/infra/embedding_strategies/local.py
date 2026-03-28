@@ -1,14 +1,13 @@
 import logging
 from typing import Tuple
 
-import numpy as np
 from sentence_transformers import SentenceTransformer
 from FlagEmbedding import BGEM3FlagModel
 from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
 from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
 from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
 
-logger = logging.getLogger("embedding")
+logger = logging.getLogger(__name__)
 
 
 class LocalEmbeddingStrategy(BaseEmbeddingStrategy):

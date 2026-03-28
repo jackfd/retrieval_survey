@@ -32,7 +32,7 @@ class ChunkSelector:
         candidates = self._split_to_candidates(text)
         embeddings = self._embed_chunks(candidates)
         centroid = self._compute_centroid(embeddings)
-        rep_scores = embeddings @ centroid
+        rep_scores = self._compute_rep_scores(embeddings, centroid)
         selected_indices, selected_scores = self._select_top_n(embeddings, rep_scores)
         return self._build_records(
             doc_id=doc_id,
@@ -72,18 +72,12 @@ class ChunkSelector:
         ]
 
     def _split_block(self, text: str) -> List[str]:
-        """
-        将文本分割成多个块，确保每个块不超过目标token数
-        """
-        # 计算输入文本的token数量
         token_count = self._count_tokens(text)
         if token_count <= self.config.target_tokens:
             return [text]
 
-        # 按句子分割文本
         sentences = self._split_sentences(text)
         if len(sentences) <= 1:
-            # 如果只有一个句子，则使用长文本分割方法
             return self._split_long_text(text, self.config.hard_max_tokens)
 
         chunks: List[str] = []
@@ -93,7 +87,6 @@ class ChunkSelector:
             if not sentence:
                 continue
 
-            # 如果单个句子超过最大限制，则单独处理该句子
             if self._count_tokens(sentence) > self.config.hard_max_tokens:
                 if current:
                     chunks.append(current)
@@ -103,13 +96,11 @@ class ChunkSelector:
                 )
                 continue
 
-            # 尝试将当前句子与现有文本合并
             candidate = sentence if not current else current + " " + sentence
             if self._count_tokens(candidate) <= self.config.target_tokens:
                 current = candidate
                 continue
 
-            # 如果合并后超出目标长度，则保存当前文本并开始新的合并尝试
             if current:
                 chunks.append(current)
             current = sentence
@@ -117,7 +108,6 @@ class ChunkSelector:
         if current:
             chunks.append(current)
 
-        # 最终检查：确保所有块都不超过硬性最大token限制
         final_chunks: List[str] = []
         for chunk in chunks:
             if self._count_tokens(chunk) > self.config.hard_max_tokens:
@@ -135,11 +125,9 @@ class ChunkSelector:
         return [sentence for sentence in sentences if sentence]
 
     def _split_long_text(self, text: str, token_limit: int) -> List[str]:
-        """将 text 按指定的 token_limit 分割成多个部分"""
         if self._count_tokens(text) <= token_limit:
             return [text]
 
-        # 按标点符号和空格分割文本
         parts = [
             part.strip() for part in re.split(r"([,，:：、\s]+)", text) if part.strip()
         ]
@@ -154,11 +142,9 @@ class ChunkSelector:
                 current = candidate
                 continue
 
-            # 当前候选超出token限制，将current加入结果并处理part
             if current:
                 chunks.append(current.strip())
             if self._count_tokens(part) > token_limit:
-                # 单个部分就超出token限制，使用字符分割方法进一步拆分
                 chunks.extend(self._split_by_chars(part, token_limit))
                 current = ""
             else:
@@ -241,14 +227,16 @@ class ChunkSelector:
         )
         if embeddings.ndim != 2:
             raise ValueError("Chunk embeddings must be a 2D array")
-        return embeddings
+        return self._normalize_rows(embeddings)
 
     def _compute_centroid(self, embeddings: np.ndarray) -> np.ndarray:
         centroid = np.mean(embeddings, axis=0, dtype=np.float32)
-        norm = float(np.linalg.norm(centroid))
-        if norm == 0.0:
-            return centroid
-        return centroid / norm
+        return self._normalize_vector(centroid)
+
+    def _compute_rep_scores(
+        self, embeddings: np.ndarray, centroid: np.ndarray
+    ) -> np.ndarray:
+        return embeddings @ centroid
 
     def _select_top_n(
         self, embeddings: np.ndarray, rep_scores: np.ndarray
@@ -336,3 +324,14 @@ class ChunkSelector:
         cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
         other_chars = len(text) - cjk_chars
         return max(1, cjk_chars + other_chars // self.avg_char_per_token)
+
+    def _normalize_rows(self, vectors: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        norms = np.where(norms == 0.0, 1.0, norms)
+        return vectors / norms
+
+    def _normalize_vector(self, vector: np.ndarray) -> np.ndarray:
+        norm = float(np.linalg.norm(vector))
+        if norm == 0.0:
+            return vector
+        return vector / norm

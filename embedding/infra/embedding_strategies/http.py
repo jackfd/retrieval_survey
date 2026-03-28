@@ -7,12 +7,13 @@ from embedding.domain.models import ExperimentConfig, InferenceConfig
 from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
 from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
 
+logger = logging.getLogger(__name__)
+
 
 class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
     def __init__(self, experiment: ExperimentConfig, inference: InferenceConfig):
         super().__init__(experiment=experiment, inference=inference)
         self.embedding_api_url = inference.embedding_api_url
-        self.logger = logging.getLogger(__name__)
 
     def encode(self, texts, is_query):
         prepared = self._prepare_texts(texts, is_query=is_query)
@@ -46,7 +47,7 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     break
                 except (requests.exceptions.RequestException, ValueError) as exc:
                     last_error = exc
-                    self.logger.warning(
+                    logger.warning(
                         "embedding_retry_failed batch_index=%s retry=%s batch_size=%s url=%s error=%s",
                         batch_index,
                         retry,
@@ -56,7 +57,7 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
                     )
 
             if last_error is not None:
-                self.logger.error(
+                logger.error(
                     "HTTP embedding failed, batch_index=%s  last_error=%s",
                     batch_index,
                     last_error,

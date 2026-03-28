@@ -1,7 +1,5 @@
 from typing import List, Protocol
-
 import numpy as np
-
 from embedding.domain.models import ExperimentConfig, InferenceConfig
 
 

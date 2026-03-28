@@ -124,7 +124,7 @@ def test_builder_runner_run_rewrites_outputs_without_metadata(tmp_path, caplog):
             "utc_now_iso",
             side_effect=["2026-03-27T00:00:00Z", "2026-03-27T00:00:01Z"],
         ):
-            caplog.set_level("INFO", logger="embedding")
+            caplog.set_level("INFO", logger=__name__)
             runner = runner_module.BuilderRunner(
                 output_dir=output_dir,
                 dataset_ctx=dataset_ctx,

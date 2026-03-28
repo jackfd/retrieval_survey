@@ -86,16 +86,20 @@ def test_builder_runner_logs_counts_for_empty_outputs(tmp_path, caplog):
     )
     empty_queries = pd.DataFrame(columns=["query_id", "query_text", "query_embedding"])
 
-    with patch.object(runner_module, "ChunkSelector", return_value=Mock()) as selector_cls, patch.object(
+    with patch.object(
+        runner_module, "ChunkSelector", return_value=Mock()
+    ) as selector_cls, patch.object(
         runner_module, "DocumentService"
     ) as document_service_cls, patch.object(
         runner_module, "QueryService"
     ) as query_service_cls, patch.object(
-        runner_module, "utc_now_iso", side_effect=["2026-03-27T00:00:00Z", "2026-03-27T00:00:01Z"]
+        runner_module,
+        "utc_now_iso",
+        side_effect=["2026-03-27T00:00:00Z", "2026-03-27T00:00:01Z"],
     ):
         document_service_cls.return_value.process.return_value.output_df = empty_docs
         query_service_cls.return_value.process.return_value.output_df = empty_queries
-        caplog.set_level("INFO", logger="embedding")
+        caplog.set_level("INFO", logger=__name__)
 
         runner = runner_module.BuilderRunner(
             output_dir=tmp_path / "output",
