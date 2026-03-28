@@ -7,6 +7,8 @@ import numpy as np
 
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class SelectorConfig:
@@ -25,7 +27,6 @@ class ChunkSelector:
         self.embedding_strategy = embedding_strategy
         self.config = SelectorConfig()
         self.avg_char_per_token = 4
-        self.logger = logging.getLogger(__name__)
 
     def run(self, text: str, doc_id: str) -> List[Dict]:
         candidates = self._split_to_candidates(text)
@@ -95,7 +96,9 @@ class ChunkSelector:
                 continue
 
             # 如果单个句子超出硬性token限制，则单独处理
-            if self._count_tokens(sentence) > self.config.hard_max_tokens:
+            st_tokens = self._count_tokens(sentence)
+            if st_tokens > self.config.hard_max_tokens:
+                logger.warning("too long sentence, sentence tokens:%s", st_tokens)
                 if current:
                     chunks.append(current)
                     current = ""
@@ -137,8 +140,8 @@ class ChunkSelector:
 
     def _split_long_text(self, text: str, token_limit: int) -> List[str]:
         """将 text 按指定的 token_limit 分割成多个部分"""
-        # 如果整个文本的token数不超过限制，直接返回原文本作为单一分块
-        if self._count_tokens(text) <= token_limit:
+        text_tokens = self._count_tokens(text)
+        if text_tokens <= token_limit:
             return [text]
 
         # 按照标点符号和空格分割文本
@@ -147,6 +150,11 @@ class ChunkSelector:
         ]
         # 如果无法按标点符号分割，则使用字符分割方法
         if len(parts) <= 1:
+            logger.warning(
+                "Sentence splitting by punctuation failed, text_tokens:%s token_limit:%s",
+                text_tokens,
+                token_limit,
+            )
             return self._split_by_chars(text, token_limit)
 
         chunks: List[str] = []
@@ -341,7 +349,8 @@ class ChunkSelector:
         selected_indices: Sequence[int],
         selected_scores: Sequence[float],
     ) -> List[Dict]:
-        width = max(3, len(str(len(candidates))))
+        total_chunks = len(candidates)
+        width = max(3, len(str(total_chunks)))
         records: List[Dict] = []
         for rank, (candidate_index, score) in enumerate(
             zip(selected_indices, selected_scores), start=1
@@ -358,6 +367,8 @@ class ChunkSelector:
                     "chunk_rank": rank,
                 }
             )
+        if total_chunks > self.config.top_n * 3:
+            logger.info("doc id:%s has a large chunks size:%s", doc_id, total_chunks)
         return records
 
     def _count_tokens(self, text: str) -> int:
