@@ -75,10 +75,14 @@ def _load_service_modules():
 def test_document_service_process_returns_selected_chunk():
     document_module, _ = _load_service_modules()
     selector = Mock()
-    selector.select_chunks.return_value = [
+    selector.run.return_value = [
         {
+            "doc_id": "d1",
+            "chunk_id": "d1#c001",
             "chunk_text": "主题部分。主题部分。主题部分。",
-            "embedding": [1.0, 0.0, 0.0, 0.0],
+            "chunk_vector": [1.0, 0.0, 0.0, 0.0],
+            "chunk_score": 0.9,
+            "chunk_rank": 1,
         }
     ]
     service = document_module.DocumentService(selector=selector)
@@ -99,9 +103,12 @@ def test_document_service_process_returns_selected_chunk():
     result = service.process(Path("docs.jsonl"))
 
     assert list(result.output_df["doc_id"]) == ["d1"]
+    assert list(result.output_df["chunk_id"]) == ["d1#c001"]
     assert list(result.output_df["chunk_text"]) == ["主题部分。主题部分。主题部分。"]
-    assert list(result.output_df["chunk_embedding"]) == [[1.0, 0.0, 0.0, 0.0]]
-    selector.select_chunks.assert_called_once_with("主题部分。主题部分。主题部分。")
+    assert list(result.output_df["chunk_vector"]) == [[1.0, 0.0, 0.0, 0.0]]
+    assert list(result.output_df["chunk_score"]) == [0.9]
+    assert list(result.output_df["chunk_rank"]) == [1]
+    selector.run.assert_called_once_with("主题部分。主题部分。主题部分。", "d1")
 
 
 def test_document_service_rejects_empty_doc_fields():
@@ -121,7 +128,7 @@ def test_document_service_rejects_empty_doc_fields():
 def test_document_service_wraps_selector_errors():
     document_module, _ = _load_service_modules()
     selector = Mock()
-    selector.select_chunks.side_effect = RuntimeError("boom")
+    selector.run.side_effect = RuntimeError("boom")
     service = document_module.DocumentService(selector=selector)
     service.jsonl_reader = Mock(
         read_objects=Mock(

@@ -38,7 +38,7 @@
 
 - Python 3.10+
 - `PyYAML`
-- `requirements.txt` 中定义的其他运行时依赖
+- `pyproject.toml` 或 `requirements/base.txt` 中定义的其他运行时依赖
 
 ## 命令行接口
 
@@ -98,8 +98,7 @@ output/
 └── <dataset_name>/
     └── <model_id>/
         ├── docs_dim<embedding_dim>.parquet
-        ├── queries_dim<embedding_dim>.parquet
-        ├── run_metadata.json
+        └── queries_dim<embedding_dim>.parquet
 ```
 
 输出路径和文件名为固定的契约接口，未经契约修订批准不得更改。

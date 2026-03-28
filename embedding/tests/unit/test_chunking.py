@@ -1,4 +1,4 @@
-"""chunk 分割与选择逻辑的单元测试，覆盖段落切分、chunk 选择、聚类边界情况和 embedding 异常传播。"""
+"""chunk 选择逻辑单元测试，覆盖 MMR 排序、稳定合并和异常传播。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import types
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -20,25 +20,14 @@ def _load_module_from_file(module_name: str, file_path: Path):
     return module
 
 
-def _load_chunk_splitter_module():
-    splitter_path = (
-        Path(__file__).resolve().parents[2]
-        / "services"
-        / "chunking"
-        / "chunk_splitter.py"
-    )
-    return _load_module_from_file("embedding.services.chunking.chunk_splitter", splitter_path)
-
-
 class SelectorConfig:
     def __init__(self, **kwargs):
-        self.cluster_ratio = 2.0
         self.batch_size = 64
-        self.alpha = 1.0
-        self.beta = 1.0
-        self.gamma = 1.0
-        self.top_keywords = 10
-        self.cooccur_window = 4
+        self.hard_max_tokens = 8092
+        self.target_tokens = 3200
+        self.min_independent_tokens = 500
+        self.top_n = 3
+        self.mmr_lambda = 0.7
         self.__dict__.update(kwargs)
 
 
@@ -63,29 +52,6 @@ def _load_chunk_selector_module():
     fake_embedding_pkg.BaseEmbeddingStrategy = base_module.BaseEmbeddingStrategy
     fake_embedding_pkg.EmbeddingStrategy = base_module.EmbeddingStrategy
 
-    fake_stopwords_module = types.ModuleType(
-        "embedding.services.chunking.stopwords_loader"
-    )
-    fake_stopwords_module.StopwordsLoader = Mock()
-    fake_stopwords_module.StopwordsLoader.load_stopwords.return_value = set()
-
-    fake_sklearn_cluster = types.ModuleType("sklearn.cluster")
-
-    class FakeKMeans:
-        def __init__(self, n_clusters, random_state=None, n_init=None, max_iter=None):
-            self.n_clusters = n_clusters
-            self.labels_ = None
-            self.cluster_centers_ = None
-
-        def fit(self, embeddings):
-            self.labels_ = np.arange(len(embeddings)) % self.n_clusters
-            self.cluster_centers_ = np.asarray(
-                embeddings[: self.n_clusters], dtype=np.float32
-            )
-            return self
-
-    fake_sklearn_cluster.KMeans = FakeKMeans
-
     selector_path = (
         Path(__file__).resolve().parents[2]
         / "services"
@@ -98,106 +64,109 @@ def _load_chunk_selector_module():
     selector_module = importlib.util.module_from_spec(selector_spec)
     assert selector_spec.loader is not None
 
-    with patch.dict(
-        sys.modules,
-        {
-            "embedding.infra.embedding_strategies": fake_embedding_pkg,
-            "embedding.infra.embedding_strategies.base": base_module,
-            "embedding.services.chunking.stopwords_loader": fake_stopwords_module,
-            "sklearn.cluster": fake_sklearn_cluster,
-        },
-    ):
-        selector_spec.loader.exec_module(selector_module)
+    original_selector_config = sys.modules.get("embedding.services.chunking.selector_config")
+    fake_selector_config = types.ModuleType("embedding.services.chunking.selector_config")
+    fake_selector_config.SelectorConfig = SelectorConfig
+
+    try:
+        sys.modules["embedding.services.chunking.selector_config"] = fake_selector_config
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "embedding.infra.embedding_strategies", fake_embedding_pkg)
+            mp.setitem(sys.modules, "embedding.infra.embedding_strategies.base", base_module)
+            selector_spec.loader.exec_module(selector_module)
+    finally:
+        if original_selector_config is None:
+            sys.modules.pop("embedding.services.chunking.selector_config", None)
+        else:
+            sys.modules["embedding.services.chunking.selector_config"] = original_selector_config
 
     return selector_module
 
 
-def test_chunk_splitter_basic_paragraph_split():
-    splitter_module = _load_chunk_splitter_module()
-    splitter = splitter_module.ChunkSplitter(min_sentences=2, max_tokens=100)
-
-    paragraphs = splitter.split_paragraphs(
-        "这是第一句。这是第二句。\n\n这是第三句。这是第四句。"
-    )
-
-    assert len(paragraphs) == 2
-    assert all(paragraph.strip() for paragraph in paragraphs)
-
-
-def test_chunk_selector_select_chunks_smoke():
-    config = SelectorConfig(alpha=0.2, beta=0.2, gamma=3.0, top_keywords=5)
+def test_chunk_selector_run_returns_ranked_top3_with_normalized_vectors():
     mock_strategy = Mock()
     mock_strategy.encode.return_value = np.array(
         [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
+            [1.0, 0.0],
+            [0.9, 0.1],
+            [0.0, 1.0],
+            [-1.0, 0.0],
         ],
         dtype=np.float32,
     )
-
     chunk_selector_module = _load_chunk_selector_module()
+    selector = chunk_selector_module.ChunkSelector(
+        embedding_strategy=mock_strategy,
+        config=SelectorConfig(top_n=3, min_independent_tokens=1, target_tokens=100),
+    )
 
-    with patch.object(
-        chunk_selector_module.StopwordsLoader,
-        "load_stopwords",
-        return_value=set(),
-    ):
-        selector = chunk_selector_module.ChunkSelector(
-            embedding_strategy=mock_strategy,
-            chunk_num=1,
-            config=config,
-        )
-        selected = selector.select_chunks(
-            "主题部分。主题部分。主题部分。\n\n其他部分。其他部分。其他部分。",
-            title="主题部分",
-        )
+    selected = selector.run(
+        "第一段内容。\n\n第二段内容。\n\n第三段内容。\n\n第四段内容。",
+        "doc123",
+    )
 
-    assert len(selected) == 1
-    assert selected[0]["chunk_text"].startswith("主题部分")
-    assert isinstance(selected[0]["score"], float)
-    assert selected[0]["embedding"] == [1.0, 0.0, 0.0, 0.0]
+    assert [item["chunk_rank"] for item in selected] == [1, 2, 3]
+    assert [item["chunk_id"] for item in selected] == [
+        "doc123#c002",
+        "doc123#c003",
+        "doc123#c001",
+    ]
+    assert all(
+        np.isclose(np.linalg.norm(np.asarray(item["chunk_vector"], dtype=float)), 1.0)
+        for item in selected
+    )
     mock_strategy.encode.assert_called_once_with(
-        ["主题部分。主题部分。主题部分。", "其他部分。其他部分。其他部分。"],
+        ["第一段内容。", "第二段内容。", "第三段内容。", "第四段内容。"],
         is_query=False,
     )
 
 
-def test_chunk_selector_cluster_chunks_single_embedding_boundary():
-    chunk_selector_module = _load_chunk_selector_module()
+def test_chunk_selector_merges_small_chunk_with_better_neighbor():
     mock_strategy = Mock()
-    mock_strategy.encode.return_value = np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+    chunk_selector_module = _load_chunk_selector_module()
+    selector = chunk_selector_module.ChunkSelector(
+        embedding_strategy=mock_strategy,
+        config=SelectorConfig(target_tokens=15, min_independent_tokens=5),
+    )
 
-    with patch.object(
-        chunk_selector_module.StopwordsLoader,
-        "load_stopwords",
-        return_value=set(),
-    ):
-        selector = chunk_selector_module.ChunkSelector(
-            embedding_strategy=mock_strategy,
-            chunk_num=5,
-            config=SelectorConfig(),
-        )
+    merged = selector._merge_small_chunks(
+        [
+            "甲甲甲甲甲甲甲甲甲甲",
+            "乙乙",
+            "丙丙丙丙丙丙丙丙丙丙丙丙丙丙",
+        ]
+    )
 
-    candidate_idxs = selector.cluster_chunks(np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32))
+    assert merged == ["甲甲甲甲甲甲甲甲甲甲\n\n乙乙", "丙丙丙丙丙丙丙丙丙丙丙丙丙丙"]
 
-    assert candidate_idxs == [0]
+
+def test_chunk_selector_returns_all_candidates_when_count_not_exceeding_top_n():
+    mock_strategy = Mock()
+    mock_strategy.encode.return_value = np.array(
+        [[1.0, 0.0], [0.0, 1.0]],
+        dtype=np.float32,
+    )
+    chunk_selector_module = _load_chunk_selector_module()
+    selector = chunk_selector_module.ChunkSelector(
+        embedding_strategy=mock_strategy,
+        config=SelectorConfig(top_n=3, min_independent_tokens=1, target_tokens=100),
+    )
+
+    selected = selector.run("第一段。\n\n第二段。", "doc1")
+
+    assert len(selected) == 2
+    assert [item["chunk_rank"] for item in selected] == [1, 2]
+    assert {item["chunk_id"] for item in selected} == {"doc1#c001", "doc1#c002"}
 
 
 def test_chunk_selector_propagates_embedding_strategy_error():
     chunk_selector_module = _load_chunk_selector_module()
     mock_strategy = Mock()
     mock_strategy.encode.side_effect = RuntimeError("boom")
-
-    with patch.object(
-        chunk_selector_module.StopwordsLoader,
-        "load_stopwords",
-        return_value=set(),
-    ):
-        selector = chunk_selector_module.ChunkSelector(
-            embedding_strategy=mock_strategy,
-            chunk_num=1,
-            config=SelectorConfig(),
-        )
+    selector = chunk_selector_module.ChunkSelector(
+        embedding_strategy=mock_strategy,
+        config=SelectorConfig(min_independent_tokens=1, target_tokens=100),
+    )
 
     with pytest.raises(RuntimeError):
-        selector.select_chunks("主题部分。主题部分。主题部分。")
+        selector.run("主题部分。主题部分。主题部分。", "doc1")

@@ -17,7 +17,7 @@ Normative keywords:
 | Argument | Required | Default | Type | Rules |
 |---|---|---|---|---|
 | `--dataset-path` | Yes | None | path | MUST exist; MUST be the `datasets/` root directory |
-| `--config-path` | Yes | None | file | MUST exist;  |
+| `--config-path` | Yes | None | file | MUST exist |
 
 Validation rules:
 
@@ -32,11 +32,11 @@ Validation rules:
 7. Resolved `dataset.json` MUST provide usable `docs_file` and `splits.train.queries_file`.
 8. Resolved docs and queries files MUST exist before embedding starts.
 9. Output vectors MUST have dimension less than or equal to the configured `embedding_dim`.
-10. Embedding strategy selection MUST come from `model_config.yaml` only (no CLI strategy override).
+10. Embedding strategy selection MUST come from `model_config.yaml` only.
 11. Runtime execution order MUST be deterministic by nested iteration:
    - outer loop: models from YAML order
    - inner loop: dataset candidates in fixed list order
-12. Any failed (dataset, model) combination MUST cause process exit code to be non-zero.
+12. Any failed `(dataset, model)` combination MUST cause process exit code to be non-zero.
 
 ### 2.2 Dataset Root Conventions
 
@@ -61,7 +61,7 @@ Behavioral rules:
 
 ## 3. Data Contracts
 
-## 3.1 Input JSONL Schemas
+### 3.1 Input JSONL Schemas
 
 Input files are read from the resolved sub-dataset directory:
 
@@ -107,7 +107,7 @@ Example:
 {"query_id":"q1","doc_id":"d1","relevance":1}
 ```
 
-## 3.2 Output Contracts
+### 3.2 Output Contracts
 
 Output directory MUST be:
 
@@ -117,9 +117,12 @@ Output directory MUST be:
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
-| `doc_id` | string | Yes | Unique in output file |
-| `chunk_text` | string | Yes | Top1 selected chunk text, non-empty |
-| `chunk_embedding` | list<float> | Yes | Length <= embedding_dim |
+| `doc_id` | string | Yes | Non-empty |
+| `chunk_id` | string | Yes | Unique in output file; format `{doc_id}#cNNN...` |
+| `chunk_text` | string | Yes | Non-empty |
+| `chunk_vector` | list<float> | Yes | Length <= embedding_dim |
+| `chunk_score` | float | Yes | Selection score used at admission time |
+| `chunk_rank` | integer | Yes | Starts at 1 within a document |
 
 ### `queries_dim<embedding_dim>.parquet`
 
@@ -129,37 +132,22 @@ Output directory MUST be:
 | `query_text` | string | Yes | Original query text |
 | `query_embedding` | list<float> | Yes | Length <= embedding_dim |
 
-### `run_metadata.json`
-
-Required top-level keys:
-
-- `run`
-- `model`
-- `stats`
-
-Minimum required fields:
-
-| Path | Type | Required |
-|---|---|---|
-| `run.start_time_utc` | string | Yes |
-| `run.end_time_utc` | string | Yes |
-| `model.model_id` | string | Yes |
-| `model.provider` | string | Yes |
-| `stats.doc_count` | integer | Yes |
-| `stats.query_count` | integer | Yes |
-
 ## 4. Behavioral Contracts
 
-1. **Top1 only**: each `doc_id` MUST map to exactly one selected chunk in final `docs_dim<embedding_dim>.parquet`.
-2. **Train-only queries**: query embeddings MUST be generated from `train/queries.jsonl` only.
-3. **Dimension upper bound**: implementation MUST fail the affected item when vector dimension exceeds `embedding_dim`.
+1. **MMR TopN**: each `doc_id` MUST emit up to `top_n` selected chunks in final `docs_dim<embedding_dim>.parquet`.
+2. **Direct keep rule**: if a document produces `<= top_n` candidate chunks, implementation MUST keep all candidates.
+3. **Selection determinism**: same input text, parameters, and embedding model MUST produce identical chunk order, chunk IDs, chunk ranks, and chunk scores.
+4. **Chunk ID rule**: chunk IDs MUST use the original candidate order, not selection rank.
+5. **Train-only queries**: query embeddings MUST be generated from `train/queries.jsonl` only.
+6. **Dimension upper bound**: implementation MUST fail the affected item when vector dimension exceeds `embedding_dim`.
    - Padding or truncation fallback is prohibited.
-4. **Embedding strategy**:
+7. **Embedding strategy**:
    - empty `embedding_api_url` MUST use direct local encoding.
    - non-empty `embedding_api_url` MUST use HTTP mode.
-5. **Fail-fast execution**:
+8. **Fail-fast execution**:
    - Any document or query processing error MUST fail the current `(dataset, model)` run immediately.
    - Failed runs MUST return non-zero exit status and MUST NOT degrade into partial-success outputs.
+9. **Full regeneration**: each run MUST rewrite docs outputs from the current input set; merge-with-existing behavior is prohibited.
 
 ## 5. Logging Contract
 
@@ -167,16 +155,16 @@ Minimum required fields:
    - exception class name
    - message text
    - related `doc_id` when available
-2. Logs SHALL include run start/end summary with counts.
-3. Business exceptions MUST be logged at the source layer before re-raising or propagating. Each such log MUST include:
-   - function name
-   - source line number
-   - reason text
-   - key context identifier(s) when available (for example: `doc_id`, `query_id`, `batch_index`, `path`, `model_id`)
+2. Logs SHALL include run start/end summary with:
+   - `model_id`
+   - `resolved_dataset_dir`
+   - start/end timestamps
+   - `doc_count`
+   - `chunk_count`
+   - `query_count`
+3. Business exceptions MUST be logged at the source layer before re-raising or propagating.
 4. Silent exception swallowing is prohibited.
-5. If code intentionally degrades to an empty result (for example `[]` or empty vectors), it MUST emit a complete log entry at that downgrade point, including function name, line number, reason, and context.
-6. Orchestration layer (`pipeline` / `processors`) SHOULD avoid duplicate error logs when source-layer detailed logs already exist.
-7. Function and line metadata SHOULD be emitted via logger formatter configuration (for example `%(filename)s:%(lineno)d`), not via custom logging wrapper functions.
+5. Function and line metadata SHOULD be emitted via logger formatter configuration.
 
 ## 6. Contract Change Protocol
 
@@ -186,8 +174,6 @@ Contract-breaking changes MUST follow this process:
 2. Update `docs/technical_design.md` impacted sections.
 3. Obtain explicit approval.
 4. Only then implement code changes.
-
-Without approval, contract-breaking code changes are prohibited.
 
 ## 7. Acceptance Criteria Linkage
 

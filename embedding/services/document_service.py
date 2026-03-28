@@ -33,7 +33,7 @@ class DocumentService:
                     % (docs_path, line_num, doc_id)
                 )
             try:
-                selected = self.selector.select_chunks(doc_text)
+                selected = self.selector.run(doc_text, doc_id)
             except Exception as exc:
                 self.logger.exception(
                     "Document chunk selection failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
@@ -47,16 +47,17 @@ class DocumentService:
                     % (docs_path, line_num, doc_id)
                 ) from exc
 
-            first = selected[0]
-            doc_records.append(
-                {
-                    "doc_id": doc_id,
-                    "chunk_text": first.get("chunk_text"),
-                    "chunk_embedding": first.get("embedding", []),
-                }
-            )
+            doc_records.extend(selected)
 
         docs_df = pd.DataFrame(
-            doc_records, columns=["doc_id", "chunk_text", "chunk_embedding"]
+            doc_records,
+            columns=[
+                "doc_id",
+                "chunk_id",
+                "chunk_text",
+                "chunk_vector",
+                "chunk_score",
+                "chunk_rank",
+            ],
         )
         return ProcessResult(output_df=docs_df)

@@ -1,7 +1,5 @@
 from pathlib import Path
 import logging
-import pandas as pd
-from typing import Any, Dict
 
 from embedding.domain.models import BuilderConfig, DatasetContext
 from embedding.infra.embedding_strategies import EmbeddingStrategy
@@ -32,72 +30,39 @@ class BuilderRunner:
 
     def run(self) -> None:
         run_start = utc_now_iso()
-
         inference = self.builder_cfg.inference
+
+        logger.info(
+            "start: model_id=%s resolved_dataset_dir=%s start_time_utc=%s",
+            self.builder_cfg.model.model_id,
+            self.dataset_ctx.resolved_dataset_dir,
+            run_start,
+        )
 
         selector = ChunkSelector(
             embedding_strategy=self.embedding_strategy,
-            chunk_num=1,
             config=SelectorConfig(batch_size=inference.batch_size),
         )
         doc_service = DocumentService(selector=selector)
-        doc_value = doc_service.process(self.dataset_ctx.docs_path)
-
-        existing_docs_df = self.output_writer.load_existing_docs()
-        merged_docs_df = pd.concat(
-            [existing_docs_df, doc_value.output_df], ignore_index=True
-        )
-        if not merged_docs_df.empty:
-            merged_docs_df = merged_docs_df.drop_duplicates(
-                subset=["doc_id"], keep="last"
-            )
+        docs_df = doc_service.process(self.dataset_ctx.docs_path).output_df
 
         query_service = QueryService(self.embedding_strategy)
-        query_value = query_service.process(self.dataset_ctx.queries_path)
-
-        metadata = build_run_metadata(
-            run_start=run_start,
-            dataset_ctx=self.dataset_ctx,
-            builder_cfg=self.builder_cfg,
-            merged_docs_df=merged_docs_df,
-            query_df=query_value.output_df,
-        )
+        queries_df = query_service.process(self.dataset_ctx.queries_path).output_df
 
         self.output_writer.write_all_outputs(
-            docs_df=merged_docs_df,
-            queries_df=query_value.output_df,
-            metadata=metadata,
+            docs_df=docs_df,
+            queries_df=queries_df,
         )
 
+        run_end = utc_now_iso()
         logger.info(
-            "end: doc_count=%s query_count=%s",
-            len(merged_docs_df),
-            len(query_value.output_df),
+            "end: model_id=%s resolved_dataset_dir=%s start_time_utc=%s end_time_utc=%s doc_count=%s chunk_count=%s query_count=%s",
+            self.builder_cfg.model.model_id,
+            self.dataset_ctx.resolved_dataset_dir,
+            run_start,
+            run_end,
+            docs_df["doc_id"].nunique() if not docs_df.empty else 0,
+            len(docs_df),
+            len(queries_df),
         )
         return None
-
-
-def build_run_metadata(
-    run_start: str,
-    dataset_ctx: DatasetContext,
-    builder_cfg: BuilderConfig,
-    merged_docs_df: pd.DataFrame,
-    query_df: pd.DataFrame,
-) -> Dict[str, Any]:
-    model = builder_cfg.model
-    run_end = utc_now_iso()
-    return {
-        "run": {
-            "start_time_utc": run_start,
-            "end_time_utc": run_end,
-            "resolved_dataset_dir": str(dataset_ctx.resolved_dataset_dir),
-        },
-        "model": {
-            "provider": model.provider,
-            "model_id": model.model_id,
-        },
-        "stats": {
-            "doc_count": int(len(merged_docs_df)),
-            "query_count": int(len(query_df)),
-        },
-    }

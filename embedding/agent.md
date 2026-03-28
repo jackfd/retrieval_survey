@@ -41,9 +41,9 @@ Every implementation PR/change set MUST include explicit evidence for:
 3. **Logging checks**
    - `app.log` path correctness
    - exception class and message presence
-4. **Retry checks**
-   - failed-doc-only reprocessing
-   - merge-by-`doc_id` overwrite behavior
+4. **Output checks**
+   - docs outputs are regenerated from current input
+   - run summary logs include doc/chunk/query counts
 
 If any checklist item is missing, delivery is incomplete.
 
