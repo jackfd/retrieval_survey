@@ -8,8 +8,8 @@ from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
 from embedding.infra.logger import setup_logger
 from embedding.infra.model_cache import initialize_model_cache
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.document_service import DocumentService
-from embedding.services.query_service import QueryService
+from embedding.services.document_service import process_doc
+from embedding.services.query_service import process_query
 import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -25,14 +25,14 @@ def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedd
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
     output_writer = OutputWriter(output_dir, config.experiment.embedding_dim)
+    try:
+        # doc
+        process_doc(embedding, ds_context.docs_path, output_writer)
 
-    # doc
-    doc_service = DocumentService(embedding)
-    doc_service.process(ds_context.docs_path, output_writer)
-
-    # query
-    query_service = QueryService(embedding)
-    query_service.process(ds_context.queries_path, output_writer)
+        # query
+        process_query(embedding, ds_context.queries_path, output_writer)
+    finally:
+        output_writer.close()
 
 
 def main(dataset_path: str, config_path: str) -> int:

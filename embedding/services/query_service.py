@@ -68,7 +68,7 @@ def process_query(
     if query_counts > 0:
         log_query_embedding_timing(queries_path, query_counts, elapsed_sec)
 
-    df = pd.DataFrame(records, QUERY_COLUMNS)
+    df = pd.DataFrame(records, columns=QUERY_COLUMNS)
     output.write_queries(df)
     logger.info("query summary: query_count=%s", len(df))
 

@@ -1,237 +1,139 @@
-"""文档和查询服务的单元测试，覆盖正常处理、空字段校验和下游异常包装。"""
+"""Service-layer unit tests for function-based document/query processing."""
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-import sys
-import types
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
 from embedding.domain.exceptions import ProcessingError
+from embedding.domain.models import DOC_COLUMNS
+from embedding.services import document_service, query_service
 
 
-def _load_module_from_file(module_name: str, file_path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+def _chunk(doc_id: str, idx: int) -> dict:
+    return {
+        "doc_id": doc_id,
+        "chunk_id": f"{doc_id}#c{idx:03d}",
+        "chunk_text": f"chunk-{doc_id}-{idx}",
+        "chunk_vector": [float(idx), 0.0, 1.0],
+        "chunk_score": 0.9,
+        "chunk_rank": idx,
+    }
 
 
-def _load_service_modules():
-    base_path = (
-        Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
-        / "base.py"
-    )
-    base_module = _load_module_from_file(
-        "embedding.infra.embedding_strategies.base", base_path
-    )
-
-    fake_embedding_pkg = types.ModuleType("embedding.infra.embedding_strategies")
-    fake_embedding_pkg.__path__ = [
-        str(Path(__file__).resolve().parents[2] / "infra" / "embedding_strategies")
+def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
+    docs = [
+        (1, {"doc_id": "d1", "doc_text": "text-1"}),
+        (2, {"doc_id": "d2", "doc_text": "text-2"}),
+        (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
-    fake_embedding_pkg.EmbeddingStrategy = base_module.EmbeddingStrategy
-    fake_embedding_pkg.BaseEmbeddingStrategy = base_module.BaseEmbeddingStrategy
-
-    fake_chunk_selector_module = types.ModuleType(
-        "embedding.services.chunking.chunk_selector"
-    )
-    fake_chunk_selector_module.ChunkSelector = object
-
-    fake_chunking_pkg = types.ModuleType("embedding.services.chunking")
-    fake_chunking_pkg.__path__ = [
-        str(Path(__file__).resolve().parents[2] / "services" / "chunking")
+    selected_batches = [
+        [_chunk("d1", 1), _chunk("d1", 2)],
+        [_chunk("d2", 1)],
+        [_chunk("d3", 1), _chunk("d3", 2)],
     ]
 
-    document_path = Path(__file__).resolve().parents[2] / "services" / "document_service.py"
-    query_path = Path(__file__).resolve().parents[2] / "services" / "query_service.py"
-
-    with patch.dict(
-        sys.modules,
-        {
-            "embedding.infra.embedding_strategies": fake_embedding_pkg,
-            "embedding.infra.embedding_strategies.base": base_module,
-            "embedding.services.chunking": fake_chunking_pkg,
-            "embedding.services.chunking.chunk_selector": fake_chunk_selector_module,
-        },
-    ):
-        document_module = _load_module_from_file(
-            "embedding.services.document_service", document_path
-        )
-        query_module = _load_module_from_file(
-            "embedding.services.query_service", query_path
-        )
-
-    return document_module, query_module
-
-
-def test_document_service_process_returns_selected_chunk():
-    document_module, _ = _load_service_modules()
     selector = Mock()
-    selector.run.return_value = [
-        {
-            "doc_id": "d1",
-            "chunk_id": "d1#c001",
-            "chunk_text": "主题部分。主题部分。主题部分。",
-            "chunk_vector": [1.0, 0.0, 0.0, 0.0],
-            "chunk_score": 0.9,
-            "chunk_rank": 1,
-        }
+    selector.run.side_effect = selected_batches
+
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(document_service, "ChunkSelector", lambda _e: selector)
+    monkeypatch.setattr(document_service, "DOC_FLUSH_CHUNK_THRESHOLD", 3)
+
+    output = Mock()
+
+    document_service.process_doc(Mock(), Path("docs.jsonl"), output)
+
+    assert output.write_docs.call_count == 2
+    first_df = output.write_docs.call_args_list[0].args[0]
+    second_df = output.write_docs.call_args_list[1].args[0]
+
+    assert list(first_df.columns) == DOC_COLUMNS
+    assert list(second_df.columns) == DOC_COLUMNS
+    assert len(first_df) == 3
+    assert len(second_df) == 2
+
+
+def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch):
+    docs = [
+        (1, {"doc_id": "d1", "doc_text": "text-1"}),
+        (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
-    service = document_module.DocumentService(selector=selector)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[
-                (
-                    1,
-                    {
-                        "doc_id": "d1",
-                        "doc_text": "主题部分。主题部分。主题部分。",
-                    },
-                )
-            ]
-        )
-    )
+    selected_batches = [
+        [_chunk("d1", 1), _chunk("d1", 2)],
+        [_chunk("d2", 1)],
+    ]
 
-    result = service.process(Path("docs.jsonl"))
-
-    assert list(result.output_df["doc_id"]) == ["d1"]
-    assert list(result.output_df["chunk_id"]) == ["d1#c001"]
-    assert list(result.output_df["chunk_text"]) == ["主题部分。主题部分。主题部分。"]
-    assert list(result.output_df["chunk_vector"]) == [[1.0, 0.0, 0.0, 0.0]]
-    assert list(result.output_df["chunk_score"]) == [0.9]
-    assert list(result.output_df["chunk_rank"]) == [1]
-    selector.run.assert_called_once_with(["主题部分。主题部分。主题部分。"], "d1")
-
-
-def test_document_service_process_normalizes_list_doc_text():
-    document_module, _ = _load_service_modules()
     selector = Mock()
-    selector.run.return_value = []
-    service = document_module.DocumentService(selector=selector)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[
-                (
-                    1,
-                    {
-                        "doc_id": "d1",
-                        "doc_text": ["  第一段。", "", " 第二段。 "],
-                    },
-                )
-            ]
-        )
-    )
+    selector.run.side_effect = selected_batches
 
-    service.process(Path("docs.jsonl"))
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(document_service, "ChunkSelector", lambda _e: selector)
+    monkeypatch.setattr(document_service, "DOC_FLUSH_CHUNK_THRESHOLD", 10)
 
-    selector.run.assert_called_once_with(["第一段。", "第二段。"], "d1")
+    output = Mock()
+
+    document_service.process_doc(Mock(), Path("docs.jsonl"), output)
+
+    output.write_docs.assert_called_once()
+    flushed_df = output.write_docs.call_args.args[0]
+    assert len(flushed_df) == 3
+    assert list(flushed_df.columns) == DOC_COLUMNS
 
 
-def test_document_service_rejects_invalid_doc_text_type():
-    document_module, _ = _load_service_modules()
+def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
+    docs = [
+        (1, {"doc_id": "d1", "doc_text": "text-1"}),
+        (2, {"doc_id": "d2", "doc_text": "text-2"}),
+    ]
+
     selector = Mock()
-    service = document_module.DocumentService(selector=selector)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(return_value=[(1, {"doc_id": "d1", "doc_text": {"x": 1}})])
-    )
+    selector.run.side_effect = [[], []]
+
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(document_service, "ChunkSelector", lambda _e: selector)
+
+    output = Mock()
+
+    with pytest.raises(ProcessingError, match="No documents found"):
+        document_service.process_doc(Mock(), Path("docs.jsonl"), output)
+
+    output.write_docs.assert_not_called()
+
+
+def test_process_query_encodes_and_writes(monkeypatch: pytest.MonkeyPatch):
+    queries = [(1, {"query_id": "q1", "query_text": "主题查询"})]
+    monkeypatch.setattr(query_service, "read_objects", lambda _p: queries)
+
+    embedding = Mock()
+    embedding.encode.return_value = np.array([[0.1, 0.2, 0.3]], dtype=np.float32)
+    output = Mock()
+
+    query_service.process_query(embedding, Path("queries.jsonl"), output)
+
+    embedding.encode.assert_called_once_with(["主题查询"], is_query=True)
+    output.write_queries.assert_called_once()
+    written_df = output.write_queries.call_args.args[0]
+    assert list(written_df["query_id"]) == ["q1"]
+
+
+def test_process_query_rejects_empty_query_fields(monkeypatch: pytest.MonkeyPatch):
+    queries = [(1, {"query_id": "q1", "query_text": ""})]
+    monkeypatch.setattr(query_service, "read_objects", lambda _p: queries)
 
     with pytest.raises(ProcessingError):
-        service.process(Path("docs.jsonl"))
+        query_service.process_query(Mock(), Path("queries.jsonl"), Mock())
 
 
-def test_document_service_rejects_empty_doc_fields():
-    document_module, _ = _load_service_modules()
-    selector = Mock()
-    service = document_module.DocumentService(selector=selector)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[(1, {"doc_id": "", "doc_text": "some text"})]
-        )
-    )
+def test_process_query_wraps_encoder_errors(monkeypatch: pytest.MonkeyPatch):
+    queries = [(1, {"query_id": "q1", "query_text": "主题查询"})]
+    monkeypatch.setattr(query_service, "read_objects", lambda _p: queries)
+
+    embedding = Mock()
+    embedding.encode.side_effect = RuntimeError("boom")
 
     with pytest.raises(ProcessingError):
-        service.process(Path("docs.jsonl"))
-
-
-def test_document_service_wraps_selector_errors():
-    document_module, _ = _load_service_modules()
-    selector = Mock()
-    selector.run.side_effect = RuntimeError("boom")
-    service = document_module.DocumentService(selector=selector)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[
-                (
-                    1,
-                    {
-                        "doc_id": "d1",
-                        "doc_text": "主题部分。主题部分。主题部分。",
-                    },
-                )
-            ]
-        )
-    )
-
-    with pytest.raises(ProcessingError):
-        service.process(Path("docs.jsonl"))
-
-
-def test_query_service_process_encodes_queries():
-    _, query_module = _load_service_modules()
-    embedding_strategy = Mock()
-    embedding_strategy.encode.return_value = np.array(
-        [[0.1, 0.2, 0.3, 0.4]], dtype=np.float32
-    )
-    service = query_module.QueryService(embedding_strategy=embedding_strategy)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[(1, {"query_id": "q1", "query_text": "主题查询"})]
-        )
-    )
-
-    result = service.process(Path("queries.jsonl"))
-
-    assert list(result.output_df["query_id"]) == ["q1"]
-    assert list(result.output_df["query_text"]) == ["主题查询"]
-    assert np.allclose(
-        np.asarray(result.output_df["query_embedding"].iloc[0], dtype=float),
-        np.asarray([0.1, 0.2, 0.3, 0.4], dtype=float),
-    )
-    embedding_strategy.encode.assert_called_once_with(["主题查询"], is_query=True)
-
-
-def test_query_service_rejects_empty_query_fields():
-    _, query_module = _load_service_modules()
-    embedding_strategy = Mock()
-    service = query_module.QueryService(embedding_strategy=embedding_strategy)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[(1, {"query_id": "q1", "query_text": ""})]
-        )
-    )
-
-    with pytest.raises(ProcessingError):
-        service.process(Path("queries.jsonl"))
-
-
-def test_query_service_wraps_encoder_errors():
-    _, query_module = _load_service_modules()
-    embedding_strategy = Mock()
-    embedding_strategy.encode.side_effect = RuntimeError("boom")
-    service = query_module.QueryService(embedding_strategy=embedding_strategy)
-    service.jsonl_reader = Mock(
-        read_objects=Mock(
-            return_value=[(1, {"query_id": "q1", "query_text": "主题查询"})]
-        )
-    )
-
-    with pytest.raises(ProcessingError):
-        service.process(Path("queries.jsonl"))
+        query_service.process_query(embedding, Path("queries.jsonl"), Mock())
