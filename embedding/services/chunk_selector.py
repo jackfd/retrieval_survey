@@ -49,6 +49,9 @@ class ChunkSelector:
         if self._embed_chunk_count_window >= self.LOG_EVERY_N:
             self._log_embedding_timing()
         if embeddings.ndim != 2:
+            logger.error(
+                "Chunk embeddings must be a 2D array, got %s", embeddings.shape
+            )
             raise ValueError("Chunk embeddings must be a 2D array")
         return self._normalize_rows(embeddings)
 

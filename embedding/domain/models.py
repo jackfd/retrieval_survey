@@ -2,6 +2,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
+DOC_COLUMNS = [
+    "doc_id",
+    "chunk_id",
+    "chunk_text",
+    "chunk_vector",
+    "chunk_score",
+    "chunk_rank",
+]
+QUERY_COLUMNS = ["query_id", "query_text", "query_embedding"]
+LOG_EVERY_N = 1000
+DOC_FLUSH_CHUNK_THRESHOLD = 20000
+
 
 @dataclass
 class ExperimentConfig:
