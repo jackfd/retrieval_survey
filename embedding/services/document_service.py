@@ -6,19 +6,29 @@ import pandas as pd
 
 from embedding.domain.exceptions import ProcessingError
 from embedding.infra.jsonl_reader import JsonlReader
+from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.services.chunk_selector import ChunkSelector
+from embedding.infra.output_writer import OutputWriter
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentService:
+    COLUMNS = [
+        "doc_id",
+        "chunk_id",
+        "chunk_text",
+        "chunk_vector",
+        "chunk_score",
+        "chunk_rank",
+    ]
     LOG_EVERY_N = 1000
 
-    def __init__(self, selector: ChunkSelector):
-        self.selector = selector
+    def __init__(self, embedding: EmbeddingStrategy):
+        self.selector = ChunkSelector(embedding)
         self.jsonl_reader = JsonlReader()
 
-    def process(self, docs_path: Path) -> pd.DataFrame:
+    def process(self, docs_path: Path, output: OutputWriter) -> None:
         doc_records: List[Dict[str, Any]] = []
         doc_counts = 0
         elapsed_sec = 0.0
@@ -28,7 +38,7 @@ class DocumentService:
             doc_text = self._normalize_doc_text(obj.get("doc_text"))
             if not doc_id or not doc_text:
                 logger.error(
-                    "docs_path=%s line_num=%s doc_id=%r: doc_id/doc_text must be non-empty",
+                    "docs_path=%s line_num=%s id=%r, id/text must be non-empty",
                     docs_path,
                     line_num,
                     doc_id,
@@ -64,20 +74,16 @@ class DocumentService:
 
         if doc_counts > 0:
             log_doc_process_timing(docs_path, doc_counts, elapsed_sec)
-
-        docs_df = pd.DataFrame(
-            doc_records,
-            columns=[
-                "doc_id",
-                "chunk_id",
-                "chunk_text",
-                "chunk_vector",
-                "chunk_score",
-                "chunk_rank",
-            ],
-        )
         self.selector.flush_embedding_timing()
-        return docs_df
+
+        df = pd.DataFrame(doc_records, self.COLUMNS)
+        if df.empty:
+            logger.error("No documents found in %s", docs_path)
+            raise ProcessingError(f"No documents found in {docs_path}")
+
+        output.write_docs(df)
+        doc_count = df["doc_id"].nunique()
+        logger.info("doc summary: doc_count=%s chunk_count=%s", doc_count, len(df))
 
     def _normalize_doc_text(self, value: Any) -> List[str]:
         if isinstance(value, str):

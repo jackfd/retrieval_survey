@@ -2,12 +2,14 @@ import argparse
 from pathlib import Path
 
 from embedding.domain.exceptions import EmbedPipeError
-from embedding.app.runner import BuilderRunner
 from embedding.infra.config_loader import ConfigLoader, BuilderConfig
 from embedding.infra.dataset_loader import DatasetLoader
 from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
 from embedding.infra.logger import setup_logger
 from embedding.infra.model_cache import initialize_model_cache
+from embedding.infra.output_writer import OutputWriter
+from embedding.services.document_service import DocumentService
+from embedding.services.query_service import QueryService
 import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -15,27 +17,22 @@ OUTPUT_ROOT = "output"
 DATA_SETS = ["scifact_v1", "hotpotqa_distractor_v1", "msmarco_v1", "trec_car_v1"]
 
 
-def run_once(
-    dataset_root: str,
-    dataset_name: str,
-    builder_cfg: BuilderConfig,
-    embedding_strategy,
-):
-    model_id = builder_cfg.model.model_id
+def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedding):
+    model_id = config.model.model_id
     output_dir = Path(OUTPUT_ROOT) / model_id / dataset_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
+    output_writer = OutputWriter(output_dir, config.experiment.embedding_dim)
 
-    runner = BuilderRunner(
-        output_dir=output_dir,
-        dataset_ctx=ds_context,
-        builder_cfg=builder_cfg,
-        embedding_strategy=embedding_strategy,
-    )
+    # doc
+    doc_service = DocumentService(embedding)
+    doc_service.process(ds_context.docs_path, output_writer)
 
-    runner.run()
+    # query
+    query_service = QueryService(embedding)
+    query_service.process(ds_context.queries_path, output_writer)
 
 
 def main(dataset_path: str, config_path: str) -> int:

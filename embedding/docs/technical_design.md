@@ -49,10 +49,7 @@
   - 为下载的模型初始化稳定的缓存目录
 - `services/chunk_selector.py`
   - 完成候选切分、chunk embedding、文档中心向量计算和 MMR TopN 选择
-- `app/runner.py`
-  - 执行文档/查询嵌入流水线
-  - 直接重写输出工件
-  - 打印运行摘要日志
+
 
 ## 4. 运行时序列
 

@@ -2,24 +2,25 @@ import logging
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, List
-
 import pandas as pd
 
 from embedding.domain.exceptions import ProcessingError
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.jsonl_reader import JsonlReader
+from embedding.infra.output_writer import OutputWriter
 
 logger = logging.getLogger(__name__)
 
 
 class QueryService:
     LOG_EVERY_N = 1000
+    COLUMNS = ["query_id", "query_text", "query_embedding"]
 
     def __init__(self, embedding_strategy: EmbeddingStrategy):
         self.embedding_strategy = embedding_strategy
         self.jsonl_reader = JsonlReader()
 
-    def process(self, queries_path: Path) -> pd.DataFrame:
+    def process(self, queries_path: Path, output: OutputWriter) -> None:
         records: List[Dict[str, Any]] = []
         query_counts = 0
         elapsed_sec = 0.0
@@ -71,10 +72,9 @@ class QueryService:
         if query_counts > 0:
             log_query_embedding_timing(queries_path, query_counts, elapsed_sec)
 
-        df = pd.DataFrame(
-            records, columns=["query_id", "query_text", "query_embedding"]
-        )
-        return df
+        df = pd.DataFrame(records, self.COLUMNS)
+        output.write_queries(df)
+        logger.info("query summary: query_count=%s", len(df))
 
 
 def log_query_embedding_timing(
@@ -82,8 +82,5 @@ def log_query_embedding_timing(
 ) -> None:
     avg_ms = (elapsed_sec * 1000.0 / queries) if queries > 0 else 0.0
     logger.info(
-        "queries=%s  avg_embed_ms_per_query=%.3f queries_path=%s",
-        queries,
-        avg_ms,
-        queries_path,
+        "query counts=%s  avg_ms=%.3f queries=%s", queries, avg_ms, queries_path
     )
