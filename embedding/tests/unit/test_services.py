@@ -47,14 +47,15 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
 
     document_service.process_doc(Mock(), Path("docs.jsonl"), output)
 
-    assert output.write_docs.call_count == 2
-    first_df = output.write_docs.call_args_list[0].args[0]
-    second_df = output.write_docs.call_args_list[1].args[0]
+    assert output.write_doc_chunks.call_count == 3
+    first_chunks = output.write_doc_chunks.call_args_list[0].args[0]
+    second_chunks = output.write_doc_chunks.call_args_list[1].args[0]
+    third_chunks = output.write_doc_chunks.call_args_list[2].args[0]
 
-    assert list(first_df.columns) == DOC_COLUMNS
-    assert list(second_df.columns) == DOC_COLUMNS
-    assert len(first_df) == 3
-    assert len(second_df) == 2
+    assert len(first_chunks) == 2
+    assert len(second_chunks) == 1
+    assert len(third_chunks) == 2
+    assert set(first_chunks[0].keys()) == set(DOC_COLUMNS)
 
 
 def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch):
@@ -78,10 +79,12 @@ def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch
 
     document_service.process_doc(Mock(), Path("docs.jsonl"), output)
 
-    output.write_docs.assert_called_once()
-    flushed_df = output.write_docs.call_args.args[0]
-    assert len(flushed_df) == 3
-    assert list(flushed_df.columns) == DOC_COLUMNS
+    assert output.write_doc_chunks.call_count == 2
+    written_chunks = []
+    for call in output.write_doc_chunks.call_args_list:
+        written_chunks.extend(call.args[0])
+    assert len(written_chunks) == 3
+    assert set(written_chunks[0].keys()) == set(DOC_COLUMNS)
 
 
 def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
@@ -101,7 +104,7 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
     with pytest.raises(ProcessingError, match="No documents found"):
         document_service.process_doc(Mock(), Path("docs.jsonl"), output)
 
-    output.write_docs.assert_not_called()
+    output.write_doc_chunks.assert_not_called()
 
 
 def test_process_query_encodes_and_writes(monkeypatch: pytest.MonkeyPatch):

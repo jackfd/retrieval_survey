@@ -18,18 +18,14 @@ DATA_SETS = ["scifact_v1", "hotpotqa_distractor_v1", "msmarco_v1", "trec_car_v1"
 
 
 def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedding):
-    model_id = config.model.model_id
-    output_dir = Path(OUTPUT_ROOT) / model_id / dataset_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    model_path = config.model.model_id.replace("/", "_")
+    output_dir = Path(OUTPUT_ROOT) / model_path / dataset_name
 
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
     output_writer = OutputWriter(output_dir, config.experiment.embedding_dim)
     try:
-        # doc
         process_doc(embedding, ds_context.docs_path, output_writer)
-
-        # query
         process_query(embedding, ds_context.queries_path, output_writer)
     finally:
         output_writer.close()

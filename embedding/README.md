@@ -97,8 +97,12 @@ datasets/
 output/
 └── <dataset_name>/
     └── <model_id>/
-        ├── docs_dim<embedding_dim>.parquet
-        └── queries_dim<embedding_dim>.parquet
+        ├── docs_dim<embedding_dim>/
+        │   ├── part-00000.parquet
+        │   ├── part-00001.parquet
+        │   └── ...
+        └── queries_dim<embedding_dim>/
+            └── queries.parquet
 ```
 
 输出路径和文件名为固定的契约接口，未经契约修订批准不得更改。

@@ -113,28 +113,28 @@ Output directory MUST be:
 
 `output/<dataset_name>/<model_id>/`
 
-### `docs_dim<embedding_dim>.parquet`
+### `docs_dim<embedding_dim>/part-*.parquet`
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `doc_id` | string | Yes | Non-empty |
-| `chunk_id` | string | Yes | Unique in output file; format `{doc_id}#cNNN...` |
+| `chunk_id` | string | Yes | Unique in docs output set; format `{doc_id}#cNNN...` |
 | `chunk_text` | string | Yes | Non-empty |
 | `chunk_vector` | list<float> | Yes | Length <= embedding_dim |
 | `chunk_score` | float | Yes | Selection score used at admission time |
 | `chunk_rank` | integer | Yes | Starts at 1 within a document |
 
-### `queries_dim<embedding_dim>.parquet`
+### `queries_dim<embedding_dim>/queries.parquet`
 
 | Field | Type | Required | Constraints |
 |---|---|---|---|
-| `query_id` | string | Yes | Unique in output file |
+| `query_id` | string | Yes | Unique in query output set |
 | `query_text` | string | Yes | Original query text |
 | `query_embedding` | list<float> | Yes | Length <= embedding_dim |
 
 ## 4. Behavioral Contracts
 
-1. **MMR TopN**: each `doc_id` MUST emit up to `top_n` selected chunks in final `docs_dim<embedding_dim>.parquet`.
+1. **MMR TopN**: each `doc_id` MUST emit up to `top_n` selected chunks in final `docs_dim<embedding_dim>/part-*.parquet`.
 2. **Direct keep rule**: if a document produces `<= top_n` candidate chunks, implementation MUST keep all candidates.
 3. **Selection determinism**: same input text, parameters, and embedding model MUST produce identical chunk order, chunk IDs, chunk ranks, and chunk scores.
 4. **Chunk ID rule**: chunk IDs MUST use the original candidate order, not selection rank.
