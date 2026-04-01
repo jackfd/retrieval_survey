@@ -31,6 +31,15 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         if model.provider == "flag_embedding":
             from FlagEmbedding import BGEM3FlagModel
 
+            # BGEM3FlagModel does not consistently expose an explicit device argument
+            # across library versions. Stage-one throughput work relies on the caller
+            # passing larger batches; device placement stays library-managed here.
+            logger.info(
+                "Initializing FlagEmbedding model=%s requested_device=%s use_fp16=%s",
+                model.model_id,
+                self.inference.device,
+                str(self.inference.device).startswith("cuda"),
+            )
             encoder = BGEM3FlagModel(
                 model.model_id, use_fp16=str(self.inference.device).startswith("cuda")
             )

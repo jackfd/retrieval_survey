@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -72,6 +73,7 @@ def _load_http_module():
         )
 
 
+@contextmanager
 def _load_local_module(sentence_transformers_ctor=None, flag_ctor=None):
     fake_pkg, base_module, shape_module = _ensure_base_and_shape_modules()
     local_path = (
@@ -96,7 +98,7 @@ def _load_local_module(sentence_transformers_ctor=None, flag_ctor=None):
             "FlagEmbedding": fake_flag_module,
         },
     ):
-        return _load_module_from_file(
+        yield _load_module_from_file(
             "embedding.infra.embedding_strategies.local", local_path
         )
 
@@ -266,24 +268,23 @@ class TestLocalEmbeddingStrategy:
                     [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
                 )
 
-        local_module = _load_local_module(
+        with _load_local_module(
             sentence_transformers_ctor=DummySentenceTransformer
-        )
+        ) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(provider="sentence_transformers", model_id="test-model-id"),
+            )
 
-        strategy = local_module.LocalEmbeddingStrategy(
-            experiment=_build_experiment_cfg(embedding_dim=4),
-            inference=_build_inference_cfg(device="cpu", batch_size=4),
-            model=Mock(provider="sentence_transformers", model_id="test-model-id"),
-        )
+            assert strategy._encoder[0] == "sentence_transformers"
+            assert created == {"model_id": "test-model-id", "device": "cpu"}
+            assert strategy._encoder[1].max_seq_length == 512
 
-        assert strategy._encoder[0] == "sentence_transformers"
-        assert created == {"model_id": "test-model-id", "device": "cpu"}
-        assert strategy._encoder[1].max_seq_length == 512
+            result = strategy.encode(["hello"], is_query=True)
 
-        result = strategy.encode(["hello"], is_query=True)
-
-        assert result.shape == (1, 4)
-        assert np.isclose(np.linalg.norm(result[0]), 1.0)
+            assert result.shape == (1, 4)
+            assert np.isclose(np.linalg.norm(result[0]), 1.0)
 
     def test_flag_embedding_provider_initializes_and_encodes(self):
         created = {}
@@ -304,22 +305,21 @@ class TestLocalEmbeddingStrategy:
             ):
                 return {"dense_vecs": [[3.0, 4.0, 0.0, 0.0] for _ in texts]}
 
-        local_module = _load_local_module(flag_ctor=DummyFlagModel)
+        with _load_local_module(flag_ctor=DummyFlagModel) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cuda:0", batch_size=4),
+                model=Mock(provider="flag_embedding", model_id="bge-m3"),
+            )
 
-        strategy = local_module.LocalEmbeddingStrategy(
-            experiment=_build_experiment_cfg(embedding_dim=4),
-            inference=_build_inference_cfg(device="cuda:0", batch_size=4),
-            model=Mock(provider="flag_embedding", model_id="bge-m3"),
-        )
+            assert strategy._encoder[0] == "flag_embedding"
+            assert created == {"model_id": "bge-m3", "use_fp16": True}
 
-        assert strategy._encoder[0] == "flag_embedding"
-        assert created == {"model_id": "bge-m3", "use_fp16": True}
+            result = strategy.encode(["hello"], is_query=False)
 
-        result = strategy.encode(["hello"], is_query=False)
-
-        assert result.shape == (1, 4)
-        assert abs(float(result[0][0]) - 0.6) < 1e-6
-        assert abs(float(result[0][1]) - 0.8) < 1e-6
+            assert result.shape == (1, 4)
+            assert abs(float(result[0][0]) - 0.6) < 1e-6
+            assert abs(float(result[0][1]) - 0.8) < 1e-6
 
     def test_sentence_transformers_zero_vector_is_stable(self):
         class DummySentenceTransformer:
@@ -335,19 +335,18 @@ class TestLocalEmbeddingStrategy:
             ):
                 return np.asarray([[0.0, 0.0, 0.0, 0.0] for _ in texts], dtype=np.float32)
 
-        local_module = _load_local_module(
+        with _load_local_module(
             sentence_transformers_ctor=DummySentenceTransformer
-        )
+        ) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(provider="sentence_transformers", model_id="test-model-id"),
+            )
 
-        strategy = local_module.LocalEmbeddingStrategy(
-            experiment=_build_experiment_cfg(embedding_dim=4),
-            inference=_build_inference_cfg(device="cpu", batch_size=4),
-            model=Mock(provider="sentence_transformers", model_id="test-model-id"),
-        )
-
-        result = strategy.encode(["hello"], is_query=True)
-        assert result.shape == (1, 4)
-        assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
+            result = strategy.encode(["hello"], is_query=True)
+            assert result.shape == (1, 4)
+            assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
 
     def test_flag_embedding_zero_vector_is_stable(self):
         class DummyFlagModel:
@@ -365,26 +364,25 @@ class TestLocalEmbeddingStrategy:
             ):
                 return {"dense_vecs": [[0.0, 0.0, 0.0, 0.0] for _ in texts]}
 
-        local_module = _load_local_module(flag_ctor=DummyFlagModel)
-        strategy = local_module.LocalEmbeddingStrategy(
-            experiment=_build_experiment_cfg(embedding_dim=4),
-            inference=_build_inference_cfg(device="cpu", batch_size=4),
-            model=Mock(provider="flag_embedding", model_id="bge-m3"),
-        )
+        with _load_local_module(flag_ctor=DummyFlagModel) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(provider="flag_embedding", model_id="bge-m3"),
+            )
 
-        result = strategy.encode(["hello"], is_query=False)
-        assert result.shape == (1, 4)
-        assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
+            result = strategy.encode(["hello"], is_query=False)
+            assert result.shape == (1, 4)
+            assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
 
     def test_unsupported_provider_raises_runtime_error(self):
-        local_module = _load_local_module()
-
-        with pytest.raises(RuntimeError):
-            local_module.LocalEmbeddingStrategy(
-                experiment=_build_experiment_cfg(),
-                inference=_build_inference_cfg(device="cpu"),
-                model=Mock(provider="unknown", model_id="bad-model"),
-            )
+        with _load_local_module() as local_module:
+            with pytest.raises(RuntimeError):
+                local_module.LocalEmbeddingStrategy(
+                    experiment=_build_experiment_cfg(),
+                    inference=_build_inference_cfg(device="cpu"),
+                    model=Mock(provider="unknown", model_id="bad-model"),
+                )
 
 
 def test_http_zero_vector_is_stable():

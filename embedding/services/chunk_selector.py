@@ -1,26 +1,44 @@
 # -*- coding: utf-8 -*-
 import logging
 from typing import Dict, List, Sequence
+
 import numpy as np
 
-from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 
 
 class ChunkSelector:
-
-    def __init__(self, embedding_strategy: EmbeddingStrategy):
-        self.embedding_strategy = embedding_strategy
+    def __init__(self):
         self.top_n: int = 3
         self.mmr_lambda: float = 0.7
         self.splitter = ChunkSplitter()
         self.avg_char_per_token = 4
 
-    def run(self, text: List[str], doc_id: str) -> List[Dict]:
-        candidates = self.splitter.split_to_candidates(text)
-        embeddings = self._embed_chunks(candidates)
+    def build_candidates(self, text: List[str]) -> List[Dict[str, object]]:
+        return self.splitter.split_to_candidates(text)
+
+    def select_from_embeddings(
+        self, doc_id: str, candidates: Sequence[Dict[str, object]], embeddings
+    ) -> List[Dict]:
+        if len(candidates) != len(embeddings):
+            logger.error(
+                "Chunk embeddings count mismatch doc_id=%s candidate_count=%s embedding_count=%s",
+                doc_id,
+                len(candidates),
+                len(embeddings),
+            )
+            raise ValueError("Chunk embeddings count must match candidate count")
+
+        embeddings = np.asarray(embeddings, dtype=np.float32)
+        if embeddings.ndim != 2:
+            logger.error(
+                "Chunk embeddings must be a 2D array, got %s", embeddings.shape
+            )
+            raise ValueError("Chunk embeddings must be a 2D array")
+        embeddings = self._normalize_rows(embeddings)
+
         centroid = self._compute_centroid(embeddings)
         rep_scores = self._compute_rep_scores(embeddings, centroid)
         selected_indices, selected_scores = self._select_top_n(embeddings, rep_scores)
@@ -31,19 +49,6 @@ class ChunkSelector:
             selected_indices=selected_indices,
             selected_scores=selected_scores,
         )
-
-    def _embed_chunks(self, candidates: Sequence[Dict[str, object]]) -> np.ndarray:
-        texts = [str(candidate["text"]) for candidate in candidates]
-        embeddings = np.asarray(
-            self.embedding_strategy.encode(texts, is_query=False),
-            dtype=np.float32,
-        )
-        if embeddings.ndim != 2:
-            logger.error(
-                "Chunk embeddings must be a 2D array, got %s", embeddings.shape
-            )
-            raise ValueError("Chunk embeddings must be a 2D array")
-        return self._normalize_rows(embeddings)
 
     def _compute_centroid(self, embeddings: np.ndarray) -> np.ndarray:
         centroid = np.mean(embeddings, axis=0, dtype=np.float32)

@@ -11,8 +11,6 @@ DOC_COLUMNS = [
     "chunk_rank",
 ]
 QUERY_COLUMNS = ["query_id", "query_text", "query_embedding"]
-LOG_EVERY_N = 1000
-DOC_FLUSH_CHUNK_THRESHOLD = 20000
 
 
 @dataclass
