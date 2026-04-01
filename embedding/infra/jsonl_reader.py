@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple
 
 
-def read_objects(self, path: Path) -> Iterable[Tuple[int, Dict[str, Any]]]:
+def read_objects(path: Path) -> Iterable[Tuple[int, Dict[str, Any]]]:
     with path.open("r", encoding="utf-8") as fin:
         for line_num, raw_line in enumerate(fin, 1):
             line = raw_line.strip()
