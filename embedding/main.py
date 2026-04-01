@@ -31,10 +31,29 @@ def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedd
         output_writer.close()
 
 
+def _validate_runtime_inputs(dataset_path: str, config_path: str) -> None:
+    dataset_root = Path(dataset_path)
+    if not dataset_root.exists():
+        raise FileNotFoundError("Dataset path does not exist path=%s" % dataset_root)
+    if not dataset_root.is_dir():
+        raise NotADirectoryError(
+            "Dataset path is not a directory path=%s" % dataset_root
+        )
+
+    config_file = Path(config_path)
+    if not config_file.exists():
+        raise FileNotFoundError("Config path does not exist path=%s" % config_file)
+    if not config_file.is_file():
+        raise IsADirectoryError("Config path is not a file path=%s" % config_file)
+
+
 def main(dataset_path: str, config_path: str) -> int:
     logger = setup_logger(Path("./logs/app.log"))
     config_loader = ConfigLoader()
+    current_model_id: str | None = None
+    current_dataset_name: str | None = None
     try:
+        _validate_runtime_inputs(dataset_path, config_path)
         cache_root = initialize_model_cache()
         logger.info("Using shared model cache root: %s", cache_root)
 
@@ -43,6 +62,7 @@ def main(dataset_path: str, config_path: str) -> int:
         strategy_cache = {}
         for builder_cfg in all_cfg.values():
             model_id = builder_cfg.model.model_id
+            current_model_id = model_id
             embedding_strategy = strategy_cache.get(model_id)
             if embedding_strategy is None:
                 embedding_strategy = strategy_factory.build(
@@ -51,14 +71,26 @@ def main(dataset_path: str, config_path: str) -> int:
                 strategy_cache[model_id] = embedding_strategy
             logger.info("start model_id=%s", model_id)
             for dname in DATA_SETS:
+                current_dataset_name = dname
                 logger.info("   dataset path=%s name=%s", dataset_path, dname)
                 run_once(dataset_path, dname, builder_cfg, embedding_strategy)
         return 0
     except EmbedPipeError as exc:
-        logger.error("Pipeline failed with domain error: %s", exc)
+        logger.error(
+            "Pipeline failed with domain error: %s model_id=%s dataset_name=%s",
+            exc,
+            current_model_id,
+            current_dataset_name,
+        )
         return 1
-    except Exception:
-        logger.error("Pipeline failed with unexpected error")
+    except Exception as exc:
+        logger.exception(
+            "Pipeline failed with unexpected error error_type=%s error=%s model_id=%s dataset_name=%s",
+            type(exc).__name__,
+            exc,
+            current_model_id,
+            current_dataset_name,
+        )
         return 1
 
 

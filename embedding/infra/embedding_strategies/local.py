@@ -1,8 +1,6 @@
 import logging
 from typing import Tuple
 
-from sentence_transformers import SentenceTransformer
-from FlagEmbedding import BGEM3FlagModel
 from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
 from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
 from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
@@ -23,12 +21,16 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
 
     def _build_local_encoder(self, model: ModelConfig) -> Tuple[str, object]:
         if model.provider == "sentence_transformers":
+            from sentence_transformers import SentenceTransformer
+
             encoder = SentenceTransformer(model.model_id, device=self.inference.device)
             if hasattr(encoder, "max_seq_length"):
                 encoder.max_seq_length = int(self.experiment.max_length)
             return ("sentence_transformers", encoder)
 
         if model.provider == "flag_embedding":
+            from FlagEmbedding import BGEM3FlagModel
+
             encoder = BGEM3FlagModel(
                 model.model_id, use_fp16=str(self.inference.device).startswith("cuda")
             )
