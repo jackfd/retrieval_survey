@@ -187,7 +187,7 @@ def process_doc(
 
         # 当待处理项目数达到批处理大小时，执行批量嵌入
         while len(pending_chunk_items) >= batch_size:
-            embed_elapsed_sec, selected_chunk_count = _flush_batch(
+            elapsed_sec, selected_chunks = _flush_batch(
                 embedding=embedding,
                 selector=selector,
                 pending_docs=pending_docs,
@@ -195,18 +195,17 @@ def process_doc(
                 batch_size=batch_size,
                 output=output,
             )
-            total_elapsed_sec += embed_elapsed_sec
-            total_chunk_count += selected_chunk_count
+            total_elapsed_sec += elapsed_sec
+            total_chunk_count += selected_chunks
+
+        if line_num % 10000 == 0:
             logger.info(
-                "doc_id=%s chunk_count=%s elapsed_ms=%.3f",
-                doc_id,
-                selected_chunk_count,
-                embed_elapsed_sec * 1000.0,
+                "chunk_count=%s elapsed_ms=%.3f", selected_chunks, elapsed_sec * 1000.0
             )
 
     # 处理剩余的待处理项目（最后不足一个批次的数据）
     while pending_chunk_items:
-        embed_elapsed_sec, selected_chunk_count = _flush_batch(
+        elapsed_sec, selected_chunks = _flush_batch(
             embedding=embedding,
             selector=selector,
             pending_docs=pending_docs,
@@ -214,8 +213,8 @@ def process_doc(
             batch_size=min(batch_size, len(pending_chunk_items)),
             output=output,
         )
-        total_elapsed_sec += embed_elapsed_sec
-        total_chunk_count += selected_chunk_count
+        total_elapsed_sec += elapsed_sec
+        total_chunk_count += selected_chunks
 
     # 检查是否还有未完成嵌入的文档
     if pending_docs:
@@ -233,7 +232,7 @@ def process_doc(
 
     avg_chunk_ms = total_elapsed_sec * 1000.0 / total_chunk_count
     logger.info(
-        "doc processing completed: doc_count=%s chunk_count=%s avg_chunk_ms=%.3f",
+        "doc processing completed: total doc:%s chunk:%s avg_chunk_ms=%.3f",
         total_doc_count,
         total_chunk_count,
         avg_chunk_ms,

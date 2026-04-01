@@ -53,7 +53,7 @@ def _flush_batch(
     actual_batch_size = len(batch)
     avg_ms = elapsed_sec * 1000.0 / actual_batch_size
     logger.info(
-        "query batch encoded batch_size=%s avg_ms_per_query=%.3f start_line_num=%s",
+        "query batch encoded batch_size=%s avg_ms=%.3f start_line_no=%s",
         actual_batch_size,
         avg_ms,
         start_line_num,
