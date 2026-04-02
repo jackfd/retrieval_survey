@@ -104,13 +104,15 @@
 2. 块超过 `target_tokens` 时优先按句边界继续切。
 3. 块超过 `hard_max_tokens` 时强制继续切，必要时退化到字符级切分。
 4. 块低于 `min_independent_tokens` 时与相邻块稳定合并。
-5. 对候选 chunk 逐条计算 embedding，并统一做 L2 归一化。
-6. 对全部候选向量做均值 pooling，再归一化，得到 `doc_centroid`。
-7. 计算 `rep_score = cosine(chunk_emb, doc_centroid)`。
-8. 用 MMR 进行 TopN 选择：
+5. `process_doc` 按固定文档窗口聚合输入，为每个文档记录候选块及其在窗口 chunk 列表中的 offset。
+6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按 `inference.batch_size` 完成推理层分批。
+7. 返回的大矩阵按文档 offset 切回单篇文档，对每篇文档的候选向量统一做 L2 归一化。
+8. 对单篇文档的全部候选向量做均值 pooling，再归一化，得到 `doc_centroid`。
+9. 计算 `rep_score = cosine(chunk_emb, doc_centroid)`。
+10. 用 MMR 进行 TopN 选择：
    - 第 1 个 chunk 取最高 `rep_score`
    - 后续 chunk 取 `mmr_lambda * rep_score - (1 - mmr_lambda) * max_sim_to_selected`
-9. 若候选数不超过 `top_n`，则全部保留。
+11. 若候选数不超过 `top_n`，则全部保留，并按输入文档顺序直接写出结果。
 
 默认参数：
 
