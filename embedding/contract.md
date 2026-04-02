@@ -58,6 +58,7 @@ Behavioral rules:
    - request: `{"chunks":[...]}`
    - response: `{"vectors":[...]}`
 3. Strategy resolution and URL source MUST come from YAML only.
+4. `inference.batch_size` MUST be applied by embedding strategy implementations (local/http); service-layer processors MUST NOT split batches by this field.
 
 ## 3. Data Contracts
 

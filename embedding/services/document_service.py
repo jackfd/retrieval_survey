@@ -10,7 +10,8 @@ from embedding.domain.exceptions import ProcessingError
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.jsonl_reader import read_objects
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.chunk_selector import ChunkSelector
+from embedding.services.chunk_selector import build_candidates, select_from_embeddings
+from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 ENABLE_DOC_PERF_LOG = True
@@ -30,7 +31,7 @@ def _log_doc_batch_perf(
         embedding_elapsed_ms / embedded_chunk_count if embedded_chunk_count > 0 else 0.0
     )
     logger.info(
-        "doc_batch_perf embedded_chunk_count=%s embedding_elapsed_ms=%.3f avg_ms_per_chunk=%.3f selected_chunk_count=%s completed_doc_count=%s pending_doc_count_after=%s pending_chunk_count_after=%s start_doc_id=%s end_doc_id=%s",
+        "doc_batch_perf chunk_count=%s elapsed_ms=%.3f avg_ms=%.3f selected_chunk_count=%s completed_doc_count=%s pending_doc_count_after=%s pending_chunk_count_after=%s start_doc_id=%s end_doc_id=%s",
         embedded_chunk_count,
         embedding_elapsed_ms,
         avg_ms_per_chunk,
@@ -105,7 +106,6 @@ def _log_doc_summary_perf(
 
 
 def _drain_completed_docs(
-    selector: ChunkSelector,
     pending_docs: Deque[Dict[str, Any]],
     output: OutputWriter,
 ) -> Dict[str, Any]:
@@ -132,10 +132,12 @@ def _drain_completed_docs(
         # 将向量转换为numpy数组格式
         embeddings = np.asarray(vectors, dtype=np.float32)
         try:
-            # 使用selector从嵌入向量中选择文档块
+            # 使用选择函数从嵌入向量中选择文档块
             select_start = perf_counter()
-            selected = selector.select_from_embeddings(
-                context["doc_id"], context["candidates"], embeddings
+            selected = select_from_embeddings(
+                context["doc_id"],
+                context["candidates"],
+                embeddings,
             )
             selection_elapsed_sec += perf_counter() - select_start
         except Exception as exc:
@@ -166,14 +168,12 @@ def _drain_completed_docs(
 
 def _flush_batch(
     embedding: EmbeddingStrategy,
-    selector: ChunkSelector,
     pending_docs: Deque[Dict[str, Any]],
     pending_chunk_items: List[Dict[str, Any]],
-    batch_size: int,
     output: OutputWriter,
 ) -> Dict[str, Any]:
-    batch_items = pending_chunk_items[:batch_size]
-    del pending_chunk_items[:batch_size]
+    batch_items = list(pending_chunk_items)
+    pending_chunk_items.clear()
 
     batch_texts = [str(item["text"]) for item in batch_items]
     start_doc_id = str(batch_items[0]["doc_id"])
@@ -217,7 +217,7 @@ def _flush_batch(
         )
         context["remaining_count"] -= 1
 
-    drain_stats = _drain_completed_docs(selector, pending_docs, output)
+    drain_stats = _drain_completed_docs(pending_docs, output)
     return {
         "embedding_elapsed_sec": elapsed_sec,
         "selection_elapsed_sec": float(drain_stats["selection_elapsed_sec"]),
@@ -230,11 +230,31 @@ def _flush_batch(
     }
 
 
+def _accumulate_doc_batch_stats(
+    *,
+    batch_stats: Dict[str, Any],
+    embedding_batch_count_total: int,
+    embedding_sec_total: float,
+    selection_sec_total: float,
+    write_sec_total: float,
+    total_chunk_count: int,
+) -> Dict[str, Any]:
+    return {
+        "embedding_batch_count_total": embedding_batch_count_total + 1,
+        "embedding_sec_total": embedding_sec_total
+        + float(batch_stats["embedding_elapsed_sec"]),
+        "selection_sec_total": selection_sec_total
+        + float(batch_stats["selection_elapsed_sec"]),
+        "write_sec_total": write_sec_total + float(batch_stats["write_elapsed_sec"]),
+        "total_chunk_count": total_chunk_count
+        + int(batch_stats["selected_chunk_count"]),
+    }
+
+
 def process_doc(
-    embedding: EmbeddingStrategy, batch_size: int, doc_path: Path, output: OutputWriter
+    embedding: EmbeddingStrategy, doc_path: Path, output: OutputWriter
 ) -> None:
-    # 初始化分块选择器
-    selector = ChunkSelector()
+    splitter = ChunkSplitter()
     total_doc_count = 0
     total_chunk_count = 0
     candidate_chunk_count_total = 0
@@ -265,9 +285,8 @@ def process_doc(
                 % (doc_path, line_num, doc_id)
             )
         try:
-            # 构建文档文本的候选块
             build_start = perf_counter()
-            candidates = selector.build_candidates(doc_text)
+            candidates = build_candidates(doc_text, splitter)
             candidate_build_sec_total += perf_counter() - build_start
         except Exception as exc:
             logger.exception(
@@ -305,21 +324,27 @@ def process_doc(
                     }
                 )
 
-        # 当待处理项目数达到批处理大小时，执行批量嵌入
-        while len(pending_chunk_items) >= batch_size:
+        # 服务层不做 batch_size 切分，策略层负责分批。
+        if pending_chunk_items:
             batch_stats = _flush_batch(
                 embedding=embedding,
-                selector=selector,
                 pending_docs=pending_docs,
                 pending_chunk_items=pending_chunk_items,
-                batch_size=batch_size,
                 output=output,
             )
-            embedding_batch_count_total += 1
-            embedding_sec_total += float(batch_stats["embedding_elapsed_sec"])
-            selection_sec_total += float(batch_stats["selection_elapsed_sec"])
-            write_sec_total += float(batch_stats["write_elapsed_sec"])
-            total_chunk_count += int(batch_stats["selected_chunk_count"])
+            totals = _accumulate_doc_batch_stats(
+                batch_stats=batch_stats,
+                embedding_batch_count_total=embedding_batch_count_total,
+                embedding_sec_total=embedding_sec_total,
+                selection_sec_total=selection_sec_total,
+                write_sec_total=write_sec_total,
+                total_chunk_count=total_chunk_count,
+            )
+            embedding_batch_count_total = int(totals["embedding_batch_count_total"])
+            embedding_sec_total = float(totals["embedding_sec_total"])
+            selection_sec_total = float(totals["selection_sec_total"])
+            write_sec_total = float(totals["write_sec_total"])
+            total_chunk_count = int(totals["total_chunk_count"])
             _log_doc_batch_perf(
                 batch_stats=batch_stats,
                 pending_docs=pending_docs,
@@ -339,27 +364,6 @@ def process_doc(
                 pending_docs=pending_docs,
                 pending_chunk_items=pending_chunk_items,
             )
-
-    # 处理剩余的待处理项目（最后不足一个批次的数据）
-    while pending_chunk_items:
-        batch_stats = _flush_batch(
-            embedding=embedding,
-            selector=selector,
-            pending_docs=pending_docs,
-            pending_chunk_items=pending_chunk_items,
-            batch_size=min(batch_size, len(pending_chunk_items)),
-            output=output,
-        )
-        embedding_batch_count_total += 1
-        embedding_sec_total += float(batch_stats["embedding_elapsed_sec"])
-        selection_sec_total += float(batch_stats["selection_elapsed_sec"])
-        write_sec_total += float(batch_stats["write_elapsed_sec"])
-        total_chunk_count += int(batch_stats["selected_chunk_count"])
-        _log_doc_batch_perf(
-            batch_stats=batch_stats,
-            pending_docs=pending_docs,
-            pending_chunk_items=pending_chunk_items,
-        )
 
     # 检查是否还有未完成嵌入的文档
     if pending_docs:

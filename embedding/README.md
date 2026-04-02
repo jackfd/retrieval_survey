@@ -74,6 +74,11 @@ retrieval-embedding --dataset-path datasets --config-path model_config.yaml
 2. 后续评估时重新运行相同命令，流程应重用磁盘上的缓存文件。
 3. 如需指定专用的缓存位置，请在首次运行前设置 `RETRIEVAL_SURVEY_MODEL_CACHE_DIR`，并在之后持续使用同一路径。
 
+批处理语义：
+
+- `model_config.yaml` 中的 `inference.batch_size` 仅用于 embedding 策略层（本地模型或 HTTP 策略）控制推理分批。
+- `document_service` 与 `query_service` 不再接收 `batch_size` 入参，也不在服务层重复做同语义分批。
+
 ## 预期的数据集目录结构
 
 ```text

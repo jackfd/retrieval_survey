@@ -48,21 +48,21 @@ def _load_chunk_selector_module(monkeypatch: pytest.MonkeyPatch, splitter_module
 def test_chunk_selector_build_candidates_calls_splitter(monkeypatch: pytest.MonkeyPatch):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     selector_module = _load_chunk_selector_module(monkeypatch, splitter_module)
-    selector = selector_module.ChunkSelector()
-    selector.splitter.split_to_candidates = Mock(
+    splitter = Mock()
+    splitter.split_to_candidates = Mock(
         return_value=[
             {"order": 1, "text": "第一段"},
             {"order": 2, "text": "第二段"},
         ]
     )
 
-    candidates = selector.build_candidates(["ignored"])
+    candidates = selector_module.build_candidates(["ignored"], splitter)
 
     assert candidates == [
         {"order": 1, "text": "第一段"},
         {"order": 2, "text": "第二段"},
     ]
-    selector.splitter.split_to_candidates.assert_called_once_with(["ignored"])
+    splitter.split_to_candidates.assert_called_once_with(["ignored"])
 
 
 def test_chunk_selector_select_from_embeddings_returns_ranked_top_n_records(
@@ -71,7 +71,6 @@ def test_chunk_selector_select_from_embeddings_returns_ranked_top_n_records(
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     selector_module = _load_chunk_selector_module(monkeypatch, splitter_module)
 
-    selector = selector_module.ChunkSelector()
     candidates = [
         {"order": 1, "text": "第一段"},
         {"order": 2, "text": "第二段"},
@@ -88,7 +87,7 @@ def test_chunk_selector_select_from_embeddings_returns_ranked_top_n_records(
         dtype=np.float32,
     )
 
-    records = selector.select_from_embeddings("doc123", candidates, embeddings)
+    records = selector_module.select_from_embeddings("doc123", candidates, embeddings)
 
     assert [item["chunk_rank"] for item in records] == [1, 2, 3]
     assert [item["chunk_id"] for item in records] == ["doc123#c002", "doc123#c003", "doc123#c001"]
@@ -104,15 +103,14 @@ def test_chunk_selector_select_from_embeddings_requires_matching_lengths(
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     selector_module = _load_chunk_selector_module(monkeypatch, splitter_module)
 
-    selector = selector_module.ChunkSelector()
     candidates = [{"order": 1, "text": "x"}]
     embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
 
     with pytest.raises(ValueError, match="2D"):
-        selector.select_from_embeddings("doc123", candidates, np.array([1.0]))
+        selector_module.select_from_embeddings("doc123", candidates, np.array([1.0]))
 
     with pytest.raises(ValueError, match="match candidate count"):
-        selector.select_from_embeddings("doc123", candidates, embeddings)
+        selector_module.select_from_embeddings("doc123", candidates, embeddings)
 
 
 def test_chunk_selector_is_better_candidate_tie_breaks_by_lower_index(
@@ -121,15 +119,13 @@ def test_chunk_selector_is_better_candidate_tie_breaks_by_lower_index(
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     selector_module = _load_chunk_selector_module(monkeypatch, splitter_module)
 
-    selector = selector_module.ChunkSelector()
-
-    assert selector._is_better_candidate(
+    assert selector_module._is_better_candidate(
         score=0.5,
         index=1,
         best_score=0.5,
         best_index=3,
     )
-    assert not selector._is_better_candidate(
+    assert not selector_module._is_better_candidate(
         score=0.5,
         index=4,
         best_score=0.5,

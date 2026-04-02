@@ -73,12 +73,10 @@ def _flush_batch(
 
 def process_query(
     embedding: EmbeddingStrategy,
-    batch_size: int,
     queries_path: Path,
     output: OutputWriter,
 ) -> None:
-    pending_batch: List[Dict[str, Any]] = []
-    total_query_count = 0
+    query_items: List[Dict[str, Any]] = []
 
     for line_num, obj in read_objects(queries_path):
         query_id = str(obj.get("query_id", "")).strip()
@@ -95,18 +93,10 @@ def process_query(
                 % (queries_path, line_num, query_id)
             )
 
-        pending_batch.append(
+        query_items.append(
             {"line_num": line_num, "query_id": query_id, "query_text": query_text}
         )
-        if len(pending_batch) < batch_size:
-            continue
+    if query_items:
+        _flush_batch(embedding, query_items, output)
 
-        _flush_batch(embedding, pending_batch, output)
-        total_query_count += len(pending_batch)
-        pending_batch = []
-
-    if pending_batch:
-        _flush_batch(embedding, pending_batch, output)
-        total_query_count += len(pending_batch)
-
-    logger.info("query summary: query_count=%s", total_query_count)
+    logger.info("query summary: query_count=%s", len(query_items))
