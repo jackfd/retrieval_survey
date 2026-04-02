@@ -367,6 +367,37 @@ def test_process_query_flushes_single_final_partial_batch(
     assert [record["query_id"] for record in written_batch] == ["q1", "q2"]
 
 
+def test_process_query_splits_work_across_windows(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    queries = [
+        (1, {"query_id": "q1", "query_text": "主题查询1"}),
+        (2, {"query_id": "q2", "query_text": "主题查询2"}),
+        (3, {"query_id": "q3", "query_text": "主题查询3"}),
+    ]
+    monkeypatch.setattr(query_service, "read_objects", lambda _p: queries)
+    monkeypatch.setattr(query_service, "QUERY_WINDOW_SIZE", 2)
+
+    embedding = Mock()
+    embedding.inference = Mock(batch_size=64)
+    embedding.encode.side_effect = [
+        np.array([[0.1, 0.2, 0.3], [0.3, 0.2, 0.1]], dtype=np.float32),
+        np.array([[0.4, 0.5, 0.6]], dtype=np.float32),
+    ]
+    output = Mock()
+
+    query_service.process_query(embedding, Path("queries.jsonl"), output)
+
+    assert embedding.encode.call_count == 2
+    assert embedding.encode.call_args_list[0].args[0] == ["主题查询1", "主题查询2"]
+    assert embedding.encode.call_args_list[1].args[0] == ["主题查询3"]
+    assert output.write_query_chunks.call_count == 2
+    first_batch = output.write_query_chunks.call_args_list[0].args[0]
+    second_batch = output.write_query_chunks.call_args_list[1].args[0]
+    assert [record["query_id"] for record in first_batch] == ["q1", "q2"]
+    assert [record["query_id"] for record in second_batch] == ["q3"]
+
+
 def test_process_query_rejects_empty_query_fields(monkeypatch: pytest.MonkeyPatch):
     queries = [(1, {"query_id": "q1", "query_text": ""})]
     monkeypatch.setattr(query_service, "read_objects", lambda _p: queries)

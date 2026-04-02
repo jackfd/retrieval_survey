@@ -122,6 +122,17 @@
 - `top_n = 3`
 - `mmr_lambda = 0.7`
 
+## 6.1 Query 向量化
+
+`process_query` 按 `collect -> encode -> save` 的固定窗口流水线处理查询：
+
+1. 从 `queries.jsonl` 中按输入顺序收集 query，服务层固定窗口大小为 `5000`。
+2. 每个窗口内完成 `query_id` 和 `query_text` 的非空校验，并保留原始行号用于错误日志。
+3. 窗口内全部 `query_text` 一次性交给 embedding 策略。
+4. embedding 策略内部继续按 `inference.batch_size` 执行推理层分批。
+5. 返回向量矩阵后，按窗口顺序组装为 `query_id/query_text/query_embedding` 记录并立即写出。
+6. 最后一个不足 `2000` 条的窗口按相同流程处理。
+
 ## 7. 故障模式与可观测性
 
 1. 业务异常在传播前于源层记录日志。
