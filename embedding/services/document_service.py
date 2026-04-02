@@ -37,7 +37,7 @@ def process_doc(
 
     output.close()
     if total_selected_chunks == 0:
-        logger.error("No document chunks found in %s", doc_path)
+        logger.error("No docs chunks found in %s", doc_path)
         raise ProcessingError(f"No documents found in {doc_path}")
 
     elapsed_sec = perf_counter() - run_start
@@ -82,14 +82,14 @@ def _collect_doc_window(
             candidate_chunks = build_candidates(doc_text, splitter)
         except Exception as exc:
             logger.exception(
-                "Document candidate preparation failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
+                "docs candidate preparation failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
                 doc_path,
                 line_num,
                 doc_id,
                 type(exc).__name__,
             )
             raise ProcessingError(
-                "Document candidate preparation failed docs_path=%s line_num=%s doc_id=%s"
+                "docs candidate preparation failed docs_path=%s line_num=%s doc_id=%s"
                 % (doc_path, line_num, doc_id)
             ) from exc
 
@@ -108,7 +108,7 @@ def _collect_doc_window(
             }
         )
     logger.info(
-        f"Document window collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
+        f"docs window completed, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
     )
     return docs_window, window_chunk_texts
 
@@ -130,32 +130,32 @@ def _process_doc_window(
         vectors = embedding.encode(chunk_candicates, is_query=False)
     except Exception as exc:
         logger.exception(
-            "Document embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s error_type=%s",
+            "docs embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s error_type=%s",
             start_doc_id,
             end_doc_id,
             chunks_count,
             type(exc).__name__,
         )
         raise ProcessingError(
-            "Document embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s"
+            "docs embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s"
             % (start_doc_id, end_doc_id, chunks_count)
         ) from exc
 
     if len(vectors) != chunks_count:
         logger.error(
-            "Document embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s",
+            "docs embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s",
             start_doc_id,
             end_doc_id,
             chunks_count,
             len(vectors),
         )
         raise ProcessingError(
-            "Document embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s"
+            "docs embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s"
             % (start_doc_id, end_doc_id, chunks_count, len(vectors))
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "Document embedding window, chunks=%s total_sec:%.3f, avg_ms:%.3f ",
+        "   docs embedding, chunks=%s total_sec:%.3f, avg_ms:%.3f ",
         chunks_count,
         elapsed_sec,
         elapsed_sec * 1000 / chunks_count,
@@ -176,13 +176,13 @@ def _process_doc_window(
             selected = select_from_embeddings(doc_id, chunk_candicates, chunk_vectors)
         except Exception as exc:
             logger.exception(
-                "Document chunk selection failed doc_id=%s line_num=%s error_type=%s",
+                "docs chunk selection failed doc_id=%s line_num=%s error_type=%s",
                 doc_id,
                 doc["line_num"],
                 type(exc).__name__,
             )
             raise ProcessingError(
-                "Document chunk selection failed doc_id=%s line_num=%s"
+                "docs chunk selection failed doc_id=%s line_num=%s"
                 % (doc_id, doc["line_num"])
             ) from exc
 
@@ -192,7 +192,7 @@ def _process_doc_window(
 
     write_elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "Doc window completed, total chunks:%s total_secs:%.3f",
+        "   doc selected, total chunks:%s total_secs:%.3f",
         total_selected_chunks,
         write_elapsed_sec,
     )

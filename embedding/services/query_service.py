@@ -29,7 +29,7 @@ def process_query(
         output.write_query_chunks(encoded_records)
         total_query_count += len(query_window)
 
-    logger.info("summary, path:%s query_count=%s", queries_path, total_query_count)
+    logger.info("query summary, path:%s, count=%s", queries_path, total_query_count)
 
 
 def _collect_query_window(
@@ -106,7 +106,7 @@ def _encode_query_window(
     actual_batch_size = len(query_window)
     avg_ms = elapsed_sec * 1000.0 / actual_batch_size
     logger.info(
-        "query window encoded query_size=%s avg_ms=%.3f start_line_num=%s",
+        "   query embedding size=%s avg_ms=%.3f start_line_num=%s",
         actual_batch_size,
         avg_ms,
         start_line_num,
