@@ -44,11 +44,16 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
         [_chunk("d3", 1), _chunk("d3", 2)],
     ])
     embedding = Mock()
-    embedding.encode.side_effect = [
-        np.array([[1.0, 0.0], [0.8, 0.2]], dtype=np.float32),
-        np.array([[0.1, 0.9], [0.9, 0.1]], dtype=np.float32),
-        np.array([[0.5, 0.5]], dtype=np.float32),
-    ]
+    embedding.encode.return_value = np.array(
+        [
+            [1.0, 0.0],
+            [0.8, 0.2],
+            [0.1, 0.9],
+            [0.9, 0.1],
+            [0.5, 0.5],
+        ],
+        dtype=np.float32,
+    )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
     monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
@@ -61,13 +66,15 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     document_service.process_doc(embedding, Path("docs.jsonl"), output)
 
     assert output.write_doc_chunks.call_count == 3
-    assert embedding.encode.call_count == 3
-    assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d1-c2"]
-    assert embedding.encode.call_args_list[1].args[0] == ["d2-c1"]
-    assert embedding.encode.call_args_list[2].args[0] == ["d3-c1", "d3-c2"]
+    assert embedding.encode.call_count == 1
+    assert embedding.encode.call_args_list[0].args[0] == [
+        "d1-c1",
+        "d1-c2",
+        "d2-c1",
+        "d3-c1",
+        "d3-c2",
+    ]
     assert embedding.encode.call_args_list[0].kwargs == {"is_query": False}
-    assert embedding.encode.call_args_list[1].kwargs == {"is_query": False}
-    assert embedding.encode.call_args_list[2].kwargs == {"is_query": False}
     assert build_candidates_mock.call_count == 3
     assert build_candidates_mock.call_args_list[0].args[1] is splitter
     assert select_from_embeddings_mock.call_args_list[0].args[0] == "d1"
@@ -83,6 +90,15 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     ] == ["d3-c1", "d3-c2"]
     assert select_from_embeddings_mock.call_args_list[1].args[2].shape == (1, 2)
     assert select_from_embeddings_mock.call_args_list[2].args[2].shape == (2, 2)
+    assert select_from_embeddings_mock.call_args_list[0].args[2].shape == (2, 2)
+    np.testing.assert_array_equal(
+        select_from_embeddings_mock.call_args_list[1].args[2],
+        np.array([[0.1, 0.9]], dtype=np.float32),
+    )
+    np.testing.assert_array_equal(
+        select_from_embeddings_mock.call_args_list[2].args[2],
+        np.array([[0.9, 0.1], [0.5, 0.5]], dtype=np.float32),
+    )
     first_chunks = output.write_doc_chunks.call_args_list[0].args[0]
     second_chunks = output.write_doc_chunks.call_args_list[1].args[0]
     third_chunks = output.write_doc_chunks.call_args_list[2].args[0]
@@ -176,10 +192,10 @@ def test_process_doc_waits_for_full_doc_before_selecting(
         [_chunk("d2", 1)],
     ])
     embedding = Mock()
-    embedding.encode.side_effect = [
-        np.array([[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]], dtype=np.float32),
-        np.array([[0.2, 0.8]], dtype=np.float32),
-    ]
+    embedding.encode.return_value = np.array(
+        [[1.0, 0.0], [0.5, 0.5], [0.0, 1.0], [0.2, 0.8]],
+        dtype=np.float32,
+    )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
     monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
@@ -191,11 +207,17 @@ def test_process_doc_waits_for_full_doc_before_selecting(
 
     document_service.process_doc(embedding, Path("docs.jsonl"), output)
 
-    assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d1-c2", "d1-c3"]
-    assert embedding.encode.call_args_list[1].args[0] == ["d2-c1"]
+    assert embedding.encode.call_count == 1
+    assert embedding.encode.call_args_list[0].args[0] == [
+        "d1-c1",
+        "d1-c2",
+        "d1-c3",
+        "d2-c1",
+    ]
     assert select_from_embeddings_mock.call_args_list[0].args[0] == "d1"
     assert select_from_embeddings_mock.call_args_list[0].args[2].shape == (3, 2)
     assert select_from_embeddings_mock.call_args_list[1].args[0] == "d2"
+    assert select_from_embeddings_mock.call_args_list[1].args[2].shape == (1, 2)
 
 
 def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
@@ -234,9 +256,48 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
         [_chunk("d3", 1)],
     ])
     embedding = Mock()
+    embedding.encode.return_value = np.array(
+        [[1.0, 0.0], [0.0, 1.0]],
+        dtype=np.float32,
+    )
+
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
+    monkeypatch.setattr(
+        document_service, "select_from_embeddings", select_from_embeddings_mock
+    )
+
+    output = Mock()
+
+    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+
+    assert embedding.encode.call_count == 1
+    assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d3-c1"]
+
+
+def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch):
+    docs = [
+        (1, {"doc_id": "d1", "doc_text": "text-1"}),
+        (2, {"doc_id": "d2", "doc_text": "text-2"}),
+        (3, {"doc_id": "d3", "doc_text": "text-3"}),
+    ]
+    splitter = Mock()
+    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(document_service, "DOC_WINDOW_SIZE", 2)
+    build_candidates_mock = Mock(
+        side_effect=[
+            [{"order": 1, "text": "d1-c1"}],
+            [{"order": 1, "text": "d2-c1"}],
+            [{"order": 1, "text": "d3-c1"}],
+        ]
+    )
+    select_from_embeddings_mock = Mock(
+        side_effect=[[_chunk("d1", 1)], [_chunk("d2", 1)], [_chunk("d3", 1)]]
+    )
+    embedding = Mock()
     embedding.encode.side_effect = [
-        np.array([[1.0, 0.0]], dtype=np.float32),
-        np.array([[0.0, 1.0]], dtype=np.float32),
+        np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        np.array([[0.5, 0.5]], dtype=np.float32),
     ]
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
@@ -249,8 +310,12 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
 
     document_service.process_doc(embedding, Path("docs.jsonl"), output)
 
-    # One encoder call for each doc that produced candidates.
     assert embedding.encode.call_count == 2
+    assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d2-c1"]
+    assert embedding.encode.call_args_list[1].args[0] == ["d3-c1"]
+    assert select_from_embeddings_mock.call_args_list[0].args[0] == "d1"
+    assert select_from_embeddings_mock.call_args_list[1].args[0] == "d2"
+    assert select_from_embeddings_mock.call_args_list[2].args[0] == "d3"
 
 
 def test_process_query_encodes_and_writes(monkeypatch: pytest.MonkeyPatch):
