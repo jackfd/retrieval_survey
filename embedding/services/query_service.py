@@ -9,7 +9,7 @@ from embedding.infra.jsonl_reader import read_objects
 from embedding.infra.output_writer import OutputWriter
 
 logger = logging.getLogger(__name__)
-QUERY_WINDOW_SIZE = 3000
+QUERY_WINDOW_SIZE = 5000
 
 
 def process_query(
@@ -106,7 +106,7 @@ def _encode_query_window(
     actual_batch_size = len(query_window)
     avg_ms = elapsed_sec * 1000.0 / actual_batch_size
     logger.info(
-        "query window encoded query_window_size=%s avg_ms=%.3f start_line_num=%s",
+        "query window encoded query_size=%s avg_ms=%.3f start_line_num=%s",
         actual_batch_size,
         avg_ms,
         start_line_num,

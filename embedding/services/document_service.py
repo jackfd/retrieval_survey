@@ -13,7 +13,40 @@ from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 
-DOC_WINDOW_SIZE = 1000
+DOC_WINDOW_SIZE = 3000
+
+
+def process_doc(
+    embedding: EmbeddingStrategy, doc_path: Path, output: OutputWriter
+) -> None:
+    run_start = perf_counter()
+    splitter = ChunkSplitter()
+    total_selected_chunks = 0
+    read_iter = iter(read_objects(doc_path))
+
+    while True:
+        docs_window, chunk_candicates = _collect_doc_window(
+            read_iter, splitter, DOC_WINDOW_SIZE, doc_path
+        )
+        if not docs_window:
+            break
+
+        total_selected_chunks += _process_doc_window(
+            embedding, docs_window, chunk_candicates, output
+        )
+
+    output.close()
+    if total_selected_chunks == 0:
+        logger.error("No document chunks found in %s", doc_path)
+        raise ProcessingError(f"No documents found in {doc_path}")
+
+    elapsed_sec = perf_counter() - run_start
+    logger.info(
+        "docs process finished doc_count:%s total_sec:%.3f, avg_ms:%.3f",
+        total_selected_chunks,
+        elapsed_sec,
+        elapsed_sec * 1000 / total_selected_chunks,
+    )
 
 
 def _collect_doc_window(
@@ -74,7 +107,9 @@ def _collect_doc_window(
                 "chunk_end": chunk_end,
             }
         )
-
+    logger.info(
+        f"Document window collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
+    )
     return docs_window, window_chunk_texts
 
 
@@ -89,6 +124,7 @@ def _process_doc_window(
     embed_start = perf_counter()
     start_doc_id = str(docs_window[0]["doc_id"])
     end_doc_id = str(docs_window[-1]["doc_id"])
+    chunks_count = len(chunk_candicates)
 
     try:
         vectors = embedding.encode(chunk_candicates, is_query=False)
@@ -97,35 +133,35 @@ def _process_doc_window(
             "Document embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s error_type=%s",
             start_doc_id,
             end_doc_id,
-            len(chunk_candicates),
+            chunks_count,
             type(exc).__name__,
         )
         raise ProcessingError(
             "Document embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s"
-            % (start_doc_id, end_doc_id, len(chunk_candicates))
+            % (start_doc_id, end_doc_id, chunks_count)
         ) from exc
 
-    if len(vectors) != len(chunk_candicates):
+    if len(vectors) != chunks_count:
         logger.error(
             "Document embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s",
             start_doc_id,
             end_doc_id,
-            len(chunk_candicates),
+            chunks_count,
             len(vectors),
         )
         raise ProcessingError(
             "Document embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s"
-            % (start_doc_id, end_doc_id, len(chunk_candicates), len(vectors))
+            % (start_doc_id, end_doc_id, chunks_count, len(vectors))
         )
-    embed_end = perf_counter()
+    elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "Document embedding window completed, start_doc_id=%s chunk_count=%s elapsed_sec=%s",
-        start_doc_id,
-        len(chunk_candicates),
-        embed_end - embed_start,
+        "Document embedding window, chunks=%s total_sec:%.3f, avg_ms:%.3f ",
+        chunks_count,
+        elapsed_sec,
+        elapsed_sec * 1000 / chunks_count,
     )
     vector_matrix = np.asarray(vectors, dtype=np.float32)
-    total_selected_chunk_count = 0
+    total_selected_chunks = 0
 
     for doc in docs_window:
         chunk_candicates = doc["candidates"]
@@ -152,39 +188,15 @@ def _process_doc_window(
 
         if selected:
             output.write_doc_chunks(selected)
-            total_selected_chunk_count += len(selected)
+            total_selected_chunks += len(selected)
 
-    write_end = perf_counter()
+    write_elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "Doc selection completed, selected chunk_count=%s total_sec=%s",
-        len(selected),
-        write_end - embed_start,
+        "Doc window completed, total chunks:%s total_secs:%.3f",
+        total_selected_chunks,
+        write_elapsed_sec,
     )
-    return total_selected_chunk_count
-
-
-def process_doc(
-    embedding: EmbeddingStrategy, doc_path: Path, output: OutputWriter
-) -> None:
-    splitter = ChunkSplitter()
-    total_selected_chunks = 0
-    read_iter = iter(read_objects(doc_path))
-
-    while True:
-        docs_window, chunk_candicates = _collect_doc_window(
-            read_iter, splitter, DOC_WINDOW_SIZE, doc_path
-        )
-        if not docs_window:
-            break
-
-        total_selected_chunks += _process_doc_window(
-            embedding, docs_window, chunk_candicates, output
-        )
-
-    output.close()
-    if total_selected_chunks == 0:
-        logger.error("No document chunks found in %s", doc_path)
-        raise ProcessingError(f"No documents found in {doc_path}")
+    return total_selected_chunks
 
 
 def _normalize_doc_text(value: Any) -> List[str]:
