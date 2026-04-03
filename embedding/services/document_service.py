@@ -108,7 +108,7 @@ def _collect_doc_window(
             }
         )
     logger.info(
-        f"docs window completed, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
+        f"  docs collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
     )
     return docs_window, window_chunk_texts
 
@@ -125,15 +125,20 @@ def _process_doc_window(
     start_doc_id = str(docs_window[0]["doc_id"])
     end_doc_id = str(docs_window[-1]["doc_id"])
     chunks_count = len(chunk_candicates)
+    max_chunk_chars, avg_chunk_chars = _chunk_char_stats(chunk_candicates)
+    model_id = _resolve_model_id(embedding)
 
     try:
         vectors = embedding.encode(chunk_candicates, is_query=False)
     except Exception as exc:
         logger.exception(
-            "docs embedding batch failed start_doc_id=%s end_doc_id=%s chunk_count=%s error_type=%s",
+            "docs embedding batch failed model_id=%s start_doc_id=%s end_doc_id=%s chunk_count=%s max_chunk_chars=%s avg_chunk_chars=%.1f error_type=%s",
+            model_id,
             start_doc_id,
             end_doc_id,
             chunks_count,
+            max_chunk_chars,
+            avg_chunk_chars,
             type(exc).__name__,
         )
         raise ProcessingError(
@@ -197,6 +202,22 @@ def _process_doc_window(
         write_elapsed_sec,
     )
     return total_selected_chunks
+
+
+def _chunk_char_stats(chunks: List[str]) -> tuple[int, float]:
+    if not chunks:
+        return 0, 0.0
+
+    lengths = [len(chunk) for chunk in chunks]
+    return max(lengths), float(sum(lengths)) / float(len(lengths))
+
+
+def _resolve_model_id(embedding: EmbeddingStrategy) -> str:
+    model = getattr(embedding, "model", None)
+    model_id = getattr(model, "model_id", None)
+    if isinstance(model_id, str) and model_id.strip():
+        return model_id
+    return "unknown"
 
 
 def _normalize_doc_text(value: Any) -> List[str]:

@@ -30,6 +30,14 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             )
             if hasattr(encoder, "max_seq_length"):
                 encoder.max_seq_length = int(self.experiment.max_length)
+            logger.info(
+                "Initializing sentence_transformers model=%s requested_device=%s batch_size=%s max_seq_length=%s trust_remote_code=%s",
+                model.model_id,
+                self.inference.device,
+                self.inference.batch_size,
+                getattr(encoder, "max_seq_length", None),
+                model.trust_remote_code,
+            )
             return ("sentence_transformers", encoder)
 
         if model.provider == "flag_embedding":

@@ -67,7 +67,7 @@ class ConfigLoader:
     def _build_model_config(self, model_obj: Dict[str, Any]) -> ModelConfig:
         model_id = str(model_obj.get("model_id", "")).strip()
         provider = str(model_obj.get("provider", "")).strip()
-        trust_remote_code = (bool(model_obj.get("trust_remote_code", False)),)
+        trust_remote_code = bool(model_obj.get("trust_remote_code", False))
         model = ModelConfig(provider, model_id, trust_remote_code)
         if not model.provider or not model.model_id:
             logger.error(

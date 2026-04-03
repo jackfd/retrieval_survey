@@ -223,9 +223,12 @@ def test_process_doc_waits_for_full_doc_before_selecting(
 def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
     docs = [(1, {"doc_id": "d1", "doc_text": "text-1"})]
     splitter = Mock()
+    logger = Mock()
     monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(document_service, "logger", logger)
     build_candidates_mock = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
     embedding = Mock()
+    embedding.model = Mock(model_id="Alibaba-NLP/gte-multilingual-base")
     embedding.encode.side_effect = RuntimeError("boom")
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
@@ -236,6 +239,19 @@ def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
         match="start_doc_id=d1 end_doc_id=d1 chunk_count=1",
     ):
         document_service.process_doc(embedding, Path("docs.jsonl"), Mock())
+
+    logger.exception.assert_called_once()
+    message = logger.exception.call_args.args[0]
+    assert "docs embedding batch failed model_id=%s" in message
+    assert logger.exception.call_args.args[1:] == (
+        "Alibaba-NLP/gte-multilingual-base",
+        "d1",
+        "d1",
+        1,
+        5,
+        5.0,
+        "RuntimeError",
+    )
 
 
 def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatch):

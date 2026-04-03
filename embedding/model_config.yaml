@@ -1,6 +1,6 @@
 experiment:
   embedding_dim: 1024
-  max_length: 8192
+  max_length: 8092
   query_prefix: "query:"
   doc_prefix: "passage:"
   instruction_template: ""
