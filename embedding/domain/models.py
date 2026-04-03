@@ -35,6 +35,7 @@ class InferenceConfig:
 class ModelConfig:
     provider: str
     model_id: str
+    trust_remote_code: bool = False
 
 
 @dataclass

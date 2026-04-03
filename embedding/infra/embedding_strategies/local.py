@@ -23,7 +23,11 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         if model.provider == "sentence_transformers":
             from sentence_transformers import SentenceTransformer
 
-            encoder = SentenceTransformer(model.model_id, device=self.inference.device)
+            encoder = SentenceTransformer(
+                model.model_id,
+                device=self.inference.device,
+                trust_remote_code=model.trust_remote_code,
+            )
             if hasattr(encoder, "max_seq_length"):
                 encoder.max_seq_length = int(self.experiment.max_length)
             return ("sentence_transformers", encoder)

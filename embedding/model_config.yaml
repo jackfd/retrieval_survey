@@ -17,9 +17,11 @@ models:
     provider: sentence_transformers
   - model_id: Alibaba-NLP/gte-multilingual-base
     provider: sentence_transformers
+    trust_remote_code: true
   - model_id: Qwen/Qwen3-Embedding-0.6B
     provider: sentence_transformers
   - model_id: jinaai/jina-embeddings-v5-text-small-retrieval
     provider: sentence_transformers
+    trust_remote_code: true
   - model_id: BAAI/bge-m3
     provider: flag_embedding

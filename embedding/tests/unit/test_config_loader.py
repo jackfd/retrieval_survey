@@ -98,6 +98,19 @@ class TestConfigLoader:
 
         assert model.model_id == "model-x"
         assert model.provider == "provider-x"
+        assert model.trust_remote_code is False
+
+    def test_build_model_config_reads_trust_remote_code(self):
+        loader = ConfigLoader()
+        model = loader._build_model_config(
+            {
+                "model_id": "model-x",
+                "provider": "provider-x",
+                "trust_remote_code": True,
+            }
+        )
+
+        assert model.trust_remote_code is True
 
     def test_build_model_config_rejects_missing_fields(self):
         loader = ConfigLoader()
@@ -140,6 +153,7 @@ class TestConfigLoader:
         model_a = configs["model-a"]
         assert model_a.model.model_id == "model-a"
         assert model_a.model.provider == "provider-a"
+        assert model_a.model.trust_remote_code is False
         assert model_a.experiment.embedding_dim == 384
         assert model_a.experiment.instruction_template == "Encode: {text}"
         assert model_a.inference.batch_size == 8

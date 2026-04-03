@@ -252,9 +252,10 @@ class TestLocalEmbeddingStrategy:
         created = {}
 
         class DummySentenceTransformer:
-            def __init__(self, model_id, device):
+            def __init__(self, model_id, device, trust_remote_code=False):
                 created["model_id"] = model_id
                 created["device"] = device
+                created["trust_remote_code"] = trust_remote_code
                 self.max_seq_length = 0
 
             def encode(
@@ -274,11 +275,19 @@ class TestLocalEmbeddingStrategy:
             strategy = local_module.LocalEmbeddingStrategy(
                 experiment=_build_experiment_cfg(embedding_dim=4),
                 inference=_build_inference_cfg(device="cpu", batch_size=4),
-                model=Mock(provider="sentence_transformers", model_id="test-model-id"),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
             )
 
             assert strategy._encoder[0] == "sentence_transformers"
-            assert created == {"model_id": "test-model-id", "device": "cpu"}
+            assert created == {
+                "model_id": "test-model-id",
+                "device": "cpu",
+                "trust_remote_code": False,
+            }
             assert strategy._encoder[1].max_seq_length == 512
 
             result = strategy.encode(["hello"], is_query=True)
@@ -323,7 +332,7 @@ class TestLocalEmbeddingStrategy:
 
     def test_sentence_transformers_zero_vector_is_stable(self):
         class DummySentenceTransformer:
-            def __init__(self, model_id, device):
+            def __init__(self, model_id, device, trust_remote_code=False):
                 self.max_seq_length = 0
 
             def encode(
@@ -341,12 +350,56 @@ class TestLocalEmbeddingStrategy:
             strategy = local_module.LocalEmbeddingStrategy(
                 experiment=_build_experiment_cfg(embedding_dim=4),
                 inference=_build_inference_cfg(device="cpu", batch_size=4),
-                model=Mock(provider="sentence_transformers", model_id="test-model-id"),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
             )
 
             result = strategy.encode(["hello"], is_query=True)
             assert result.shape == (1, 4)
             assert np.allclose(result[0], [0.0, 0.0, 0.0, 0.0])
+
+    def test_sentence_transformers_can_enable_trust_remote_code(self):
+        created = {}
+
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device, trust_remote_code=False):
+                created["model_id"] = model_id
+                created["device"] = device
+                created["trust_remote_code"] = trust_remote_code
+                self.max_seq_length = 0
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
+
+        with _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        ) as local_module:
+            local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=True,
+                ),
+            )
+
+        assert created == {
+            "model_id": "test-model-id",
+            "device": "cpu",
+            "trust_remote_code": True,
+        }
 
     def test_flag_embedding_zero_vector_is_stable(self):
         class DummyFlagModel:
