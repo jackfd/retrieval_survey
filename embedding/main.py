@@ -17,9 +17,10 @@ OUTPUT_ROOT = "~/output"
 
 
 def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedding):
+    output_root = Path(OUTPUT_ROOT).expanduser()
     model_path = config.model.model_id.replace("/", "_")
-    output_dir = Path(OUTPUT_ROOT) / model_path / dataset_name
-    candidates_path = Path(OUTPUT_ROOT) / f"{dataset_name}_candidates.jsonl"
+    output_dir = output_root / model_path / dataset_name
+    candidates_path = output_root / f"{dataset_name}_candidates.jsonl"
 
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)

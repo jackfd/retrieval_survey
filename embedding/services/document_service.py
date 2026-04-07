@@ -181,9 +181,8 @@ def _process_doc_window(
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "  2-docs embedding, dim=%s chunks=%s total_sec:%.3f, avg_ms:%.3f",
+        "  2-docs embedding, dim=%s total_sec:%.3f, avg_ms:%.3f",
         vectors.shape[1],
-        chunks_count,
         elapsed_sec,
         elapsed_sec * 1000 / chunks_count,
     )
@@ -215,12 +214,6 @@ def _process_doc_window(
             output.write_doc_chunks(selected)
             total_selected_chunks += len(selected)
 
-    write_elapsed_sec = perf_counter() - embed_start
-    logger.info(
-        "  3-doc selected, total chunks:%s total_secs:%.3f",
-        total_selected_chunks,
-        write_elapsed_sec,
-    )
     return total_selected_chunks
 
 

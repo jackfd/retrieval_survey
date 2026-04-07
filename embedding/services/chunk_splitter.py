@@ -16,11 +16,8 @@ class ChunkSplitter:
 
     def __init__(self, max_length: int = 8092):
         self.hard_max_tokens: int = max_length
-        self.target_tokens: int = min(
-            self.hard_max_tokens,
-            min(1200, max(500, int(self.hard_max_tokens * 0.5))),
-        )
-        self.min_independent_tokens: int = min(500, self.target_tokens)
+        self.target_tokens: int = min(self.hard_max_tokens, 600)
+        self.min_independent_tokens: int = 200
         self.avg_char_per_token = 4
 
     def split_to_candidates(self, text: List[str]) -> List[Dict[str, object]]:

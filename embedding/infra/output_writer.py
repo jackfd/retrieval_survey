@@ -35,6 +35,7 @@ class _ParquetShardWriter:
 
     def _flush_part(self) -> None:
         part_path = self.base_path / f"part-{self._part_index:05d}.parquet"
+        part_path.parent.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(self._buffer, columns=self.columns)
         table = pa.Table.from_pandas(df, preserve_index=False)
         pq.write_table(table, part_path)

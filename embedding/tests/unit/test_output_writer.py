@@ -91,6 +91,19 @@ def test_close_is_idempotent(tmp_path: Path):
     assert len(written) == 1
 
 
+def test_close_recreates_missing_docs_directory_before_flush(tmp_path: Path):
+    writer = OutputWriter(output_dir=tmp_path, embedding_dim=4, shard_size=10)
+
+    writer.write_doc_chunks(_doc_chunks("d1", 1))
+    writer.docs_path.rmdir()
+    writer.close()
+
+    parts = sorted((tmp_path / "docs_dim4").glob("part-*.parquet"))
+    assert len(parts) == 1
+    written = pd.read_parquet(parts[0])
+    assert list(written["doc_id"]) == ["d1"]
+
+
 def test_write_doc_chunks_empty_does_not_create_parts(tmp_path: Path):
     writer = OutputWriter(output_dir=tmp_path, embedding_dim=4, shard_size=2)
 
