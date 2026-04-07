@@ -125,3 +125,52 @@ def test_main_rejects_missing_dataset_path(monkeypatch, tmp_path):
     assert "Dataset path does not exist" in str(error)
     assert model_id is None
     assert dataset_name is None
+
+
+def test_run_once_builds_shared_candidates_once(monkeypatch, tmp_path):
+    dataset_root = tmp_path / "datasets"
+    dataset_root.mkdir()
+    ds_context = Mock(
+        docs_path=tmp_path / "datasets" / "docs.jsonl",
+        queries_path=tmp_path / "datasets" / "train" / "queries.jsonl",
+    )
+    output_writer = Mock()
+    def _build_candidates(_docs_path, target_path, _max_length):
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text("", encoding="utf-8")
+
+    build_doc_candidates = Mock(side_effect=_build_candidates)
+    process_doc = Mock()
+    process_query = Mock()
+
+    monkeypatch.setattr(main_module, "OUTPUT_ROOT", str(tmp_path / "output"))
+    monkeypatch.setattr(
+        main_module.DatasetLoader,
+        "load_dataset_context",
+        lambda _self, _root, _dataset: ds_context,
+    )
+    monkeypatch.setattr(
+        main_module, "OutputWriter", lambda *_args, **_kwargs: output_writer
+    )
+    monkeypatch.setattr(main_module, "build_doc_candidates", build_doc_candidates)
+    monkeypatch.setattr(main_module, "process_doc", process_doc)
+    monkeypatch.setattr(main_module, "process_query", process_query)
+
+    cfg = _builder_config()
+    embedding = object()
+
+    main_module.run_once(str(dataset_root), "scifact_v1", cfg, embedding)
+    main_module.run_once(str(dataset_root), "scifact_v1", cfg, embedding)
+
+    candidates_path = Path(main_module.OUTPUT_ROOT) / "scifact_v1_candidates.jsonl"
+    assert build_doc_candidates.call_count == 1
+    assert build_doc_candidates.call_args_list[0].args == (
+        ds_context.docs_path,
+        candidates_path,
+        cfg.experiment.max_length,
+    )
+    assert process_doc.call_args_list[0].args == (
+        embedding,
+        candidates_path,
+        output_writer,
+    )

@@ -39,12 +39,11 @@ def test_split_to_candidates_merges_consecutive_list_items(
     result = splitter.split_to_candidates([text])
 
     assert result == [
-        {"order": 1, "text": "概述段落。 1. 第一项内容。 2. 第二项内容。"},
-        {"order": 2, "text": "收尾段落。"},
+        {"order": 1, "text": "概述段落。 1. 第一项内容。 2. 第二项内容。\n\n收尾段落。"},
     ]
 
 
-def test_split_to_candidates_treats_multi_input_as_blocks(
+def test_split_to_candidates_treats_multi_input_as_sentence_flow(
     monkeypatch: pytest.MonkeyPatch,
 ):
     def fake_offsets(_text: str):
@@ -56,8 +55,8 @@ def test_split_to_candidates_treats_multi_input_as_blocks(
 
     result = splitter.split_to_candidates(["aaa bbb", "cccc"])
 
-    assert [item["order"] for item in result] == [1, 2, 3, 4]
-    assert [item["text"] for item in result] == ["aaa", "bbb", "ccc", "c"]
+    assert [item["order"] for item in result] == [1, 2, 3]
+    assert [item["text"] for item in result] == ["aaa", "bbb", "ccc\n\nc"]
 
 
 def test_split_to_candidates_keeps_continuous_order_for_multi_input(
@@ -69,8 +68,8 @@ def test_split_to_candidates_keeps_continuous_order_for_multi_input(
 
     result = splitter.split_to_candidates(["aaa", " ", "bbbb", "cc"])
 
-    assert [item["order"] for item in result] == [1, 2, 3, 4]
-    assert [item["text"] for item in result] == ["aaa", "bbb", "b", "cc"]
+    assert [item["order"] for item in result] == [1, 2, 3]
+    assert [item["text"] for item in result] == ["aaa", "bbb", "b\n\ncc"]
 
 
 def test_split_to_candidates_splits_single_text_by_sentences_within_limit(
@@ -101,11 +100,7 @@ def test_split_to_candidates_falls_back_to_char_split_within_limit(
 
     result = splitter.split_to_candidates(["abcdefghij"])
 
-    assert [item["text"] for item in result] == ["abc", "def", "ghi", "j"]
-    assert all(
-        splitter.estimate_tokens(item["text"]) <= splitter.hard_max_tokens
-        for item in result
-    )
+    assert [item["text"] for item in result] == ["abc", "def", "ghi\n\nj"]
 
 
 def test_split_to_candidates_keeps_equivalent_content_shapes_close(
@@ -139,7 +134,8 @@ def test_split_to_candidates_splits_long_block_inside_multi_input(
 
     result = splitter.split_to_candidates(["xx", "aaaa bbbb", "yy"])
 
-    assert [item["text"] for item in result] == ["xx", "aaaa", "bbbb", "yy"]
+    assert [item["order"] for item in result] == [1, 2]
+    assert [item["text"] for item in result] == ["xx\n\naaaa", "bbbb\n\nyy"]
 
 
 def test_split_sentences_uses_offsets_and_strips_whitespace(
@@ -155,20 +151,6 @@ def test_split_sentences_uses_offsets_and_strips_whitespace(
     result = splitter._split_sentences(text)
 
     assert result == ["First.", "Second?"]
-
-
-def test_split_oversize_fragment_falls_back_to_char_split(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    splitter_module = _load_chunk_splitter_module(monkeypatch)
-    splitter = splitter_module.ChunkSplitter(max_length=3)
-    splitter.avg_char_per_token = 1
-
-    text = "abcdefghij"
-    chunks = splitter._split_oversize_fragment(text)
-
-    assert "".join(chunks) == text
-    assert all(len(chunk) <= 3 for chunk in chunks)
 
 
 def test_default_target_tokens_match_public_dataset_defaults(

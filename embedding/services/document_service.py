@@ -84,11 +84,19 @@ def process_doc(
     read_iter = (obj for _line_num, obj in read_objects(candidates_path))
 
     while True:
-        docs_window, chunk_candidates = _collect_doc_window(
-            read_iter, DOC_WINDOW_SIZE, candidates_path
+        docs_window, chunk_candidates = _collect_doc_window(read_iter, DOC_WINDOW_SIZE)
+        logger.info(
+            "  1-docs collected, path=%s doc_count=%s chunk_count=%s",
+            candidates_path,
+            len(docs_window),
+            len(chunk_candidates),
         )
+
         if not docs_window:
             break
+
+        if not chunk_candidates:
+            continue
 
         total_selected_chunks += _process_doc_window(
             embedding, docs_window, chunk_candidates, output
@@ -108,9 +116,7 @@ def process_doc(
 
 
 def _collect_doc_window(
-    read_iter: Iterator[Dict[str, Any]],
-    doc_window_size: int,
-    candidates_path: Path,
+    read_iter: Iterator[Dict[str, Any]], doc_window_size: int
 ) -> tuple[List[Dict[str, Any]], List[str]]:
     docs_window: List[Dict[str, Any]] = []
     window_chunk_texts: List[str] = []
@@ -135,12 +141,6 @@ def _collect_doc_window(
                 "chunk_end": chunk_end,
             }
         )
-    logger.info(
-        "  1-docs collected, candidates_path=%s doc_count=%s chunk_count=%s",
-        candidates_path,
-        len(docs_window),
-        len(window_chunk_texts),
-    )
     return docs_window, window_chunk_texts
 
 
@@ -172,15 +172,13 @@ def _process_doc_window(
 
     if len(vectors) != chunks_count:
         logger.error(
-            "docs embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s",
-            start_doc_id,
-            end_doc_id,
+            "docs embedding batch size mismatch expected=%s actual=%s",
             chunks_count,
             len(vectors),
         )
         raise ProcessingError(
-            "docs embedding batch size mismatch start_doc_id=%s end_doc_id=%s expected=%s actual=%s"
-            % (start_doc_id, end_doc_id, chunks_count, len(vectors))
+            "docs embedding batch size mismatch  expected=%s actual=%s"
+            % (chunks_count, len(vectors))
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(

@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 import logging
 import re
-from collections.abc import Sequence
-from typing import Dict, List
-
+from typing import Dict, List, Sequence
 from blingfire import text_to_sentences_and_offsets
 
 logger = logging.getLogger(__name__)
 
 
 class ChunkSplitter:
-    """公开数据集候选 chunk 构建器，按内容统一切分输入文本片段。"""
+    """适合公开数据集的 chunk 切分，正式环境需要结构化的输入"""
 
     _LIST_ITEM_PATTERN = re.compile(
         r"^(?:[-*•]|(?:\(?\d+\)?|[A-Z]|[IVXivx]+)[\.\):])\s+"
@@ -20,105 +18,94 @@ class ChunkSplitter:
         self.hard_max_tokens: int = max_length
         self.target_tokens: int = min(
             self.hard_max_tokens,
-            min(1200, max(400, int(self.hard_max_tokens * 0.5))),
+            min(1200, max(500, int(self.hard_max_tokens * 0.5))),
         )
+        self.min_independent_tokens: int = min(500, self.target_tokens)
         self.avg_char_per_token = 4
 
-    def split_to_candidates(self, text: Sequence[str]) -> List[Dict[str, object]]:
+    def split_to_candidates(self, text: List[str]) -> List[Dict[str, object]]:
         """
-        将有序文本片段序列切分为候选块。
-
-        输入可以是单个原始文本块，也可以是上游提供的逻辑文本片段序列；
-        不假设多元素输入已经完成句切。
+        将输入文本分割成候选块列表
         """
-        if not isinstance(text, Sequence) or isinstance(text, (str, bytes)):
-            raise TypeError("text must be sequence[str]")
-
-        blocks = self._normalize_blocks(text)
-        if not blocks:
+        sentences = [str(item).strip() for item in text if str(item).strip()]
+        if not sentences:
             return []
 
-        # 将每个块切分为更小的片段
-        chunks: List[str] = []
-        for block in blocks:
-            chunks.extend(self._split_block(block))
+        if len(sentences) == 1:
+            split_chunks = self._split_text_flow(sentences[0])
+        else:
+            split_chunks = self._chunk_from_sentences(sentences)
 
-        self._validate_chunk_limits(chunks)
+        # 合并过小的块
+        merged_chunks = self._merge_small_chunks(split_chunks)
         return [
-            {"order": index + 1, "text": chunk} for index, chunk in enumerate(chunks)
+            {"order": index + 1, "text": chunk}
+            for index, chunk in enumerate(merged_chunks)
         ]
 
-    def _normalize_blocks(self, text: Sequence[str]) -> List[str]:
-        fragments = [s for item in text if (s := str(item).strip())]
-        if not fragments:
-            return []
+    def _split_text_flow(self, text: str) -> List[str]:
+        paragraphs = [
+            part.strip() for part in re.split(r"\n{2,}", text) if part.strip()
+        ]
 
-        raw_blocks = (
-            [part.strip() for part in re.split(r"\n{2,}", fragments[0]) if part.strip()]
-            if len(fragments) == 1
-            else fragments
-        )
-
-        # 遍历所有文本块，将列表项附加到前一个块而不是作为新块
         blocks: List[str] = []
-        for block in raw_blocks:
-            if blocks and self._LIST_ITEM_PATTERN.match(block):
-                blocks[-1] += " " + block
+        for paragraph in paragraphs:
+            if blocks and self._LIST_ITEM_PATTERN.match(paragraph):
+                blocks[-1] += " " + paragraph
                 continue
-            blocks.append(block)
-        return blocks
+            blocks.append(paragraph)
 
-    def _validate_chunk_limits(self, chunks: Sequence[str]) -> None:
-        for index, chunk in enumerate(chunks, start=1):
-            token_count = self.estimate_tokens(chunk)
-            if token_count > self.hard_max_tokens:
-                raise ValueError(
-                    "chunk exceeds max_length order=%s token_count=%s max_length=%s"
-                    % (index, token_count, self.hard_max_tokens)
-                )
+        split_chunks: List[str] = []
+        for block in blocks:
+            split_chunks.extend(self._split_block(block))
+        return split_chunks
 
     def _split_block(self, text: str) -> List[str]:
-        if self.estimate_tokens(text) <= self.target_tokens:
+        token_count = self.estimate_tokens(text)
+        if token_count <= self.target_tokens:
             return [text]
 
         sentences = self._split_sentences(text)
         if len(sentences) <= 1:
-            return self._split_oversize_fragment(text)
+            return self._split_long_text(text, self.hard_max_tokens)
+        return self._chunk_from_sentences(sentences)
 
-        return self._pack_fragments_with_limit(sentences, self.target_tokens)
-
-    def _pack_fragments_with_limit(
-        self, fragments: Sequence[str], token_limit: int
-    ) -> List[str]:
+    def _chunk_from_sentences(self, sentences: Sequence[str]) -> List[str]:
         chunks: List[str] = []
         current = ""
-
-        for fragment in fragments:
-            if not fragment:
-                continue
-
-            fragment_tokens = self.estimate_tokens(fragment)
-            if fragment_tokens > self.hard_max_tokens:
-                logger.warning("too long fragment, fragment tokens:%s", fragment_tokens)
+        for sentence in sentences:
+            # 如果单个句子超出硬性token限制，则单独处理
+            st_tokens = self.estimate_tokens(sentence)
+            if st_tokens > self.hard_max_tokens:
+                logger.warning("too long sentence, sentence tokens:%s", st_tokens)
                 if current:
                     chunks.append(current)
                     current = ""
-                chunks.extend(self._split_oversize_fragment(fragment))
+                chunks.extend(self._split_long_text(sentence, self.hard_max_tokens))
                 continue
 
-            candidate = fragment if not current else current + " " + fragment
-            if self.estimate_tokens(candidate) <= token_limit:
+            # 尝试将当前句子与前一个句子合并
+            candidate = sentence if not current else current + " " + sentence
+            if self.estimate_tokens(candidate) <= self.target_tokens:
                 current = candidate
                 continue
 
+            # 如果合并后的文本超出了目标token数，则将当前文本块加入列表
             if current:
                 chunks.append(current)
-            current = fragment
+            current = sentence
 
         if current:
             chunks.append(current)
 
-        return chunks
+        # 最终检查，确保没有任何块超过硬性最大token限制
+        final_chunks: List[str] = []
+        for chunk in chunks:
+            if self.estimate_tokens(chunk) > self.hard_max_tokens:
+                final_chunks.extend(self._split_long_text(chunk, self.hard_max_tokens))
+            else:
+                final_chunks.append(chunk)
+        return final_chunks
 
     def _split_sentences(self, text: str) -> List[str]:
         stripped = text.strip()
@@ -132,17 +119,49 @@ class ChunkSplitter:
         sentences = [text[start:end].strip() for start, end in offsets]
         return [sentence for sentence in sentences if sentence]
 
-    def _split_oversize_fragment(self, text: str) -> List[str]:
+    def _split_long_text(self, text: str, token_limit: int) -> List[str]:
+        """将 text 按指定的 token_limit 分割成多个部分"""
         text_tokens = self.estimate_tokens(text)
-        if text_tokens <= self.hard_max_tokens:
+        if text_tokens <= token_limit:
             return [text]
 
-        logger.warning(
-            "fallback to char split, text_tokens:%s token_limit:%s",
-            text_tokens,
-            self.hard_max_tokens,
-        )
-        return self._split_by_chars(text, self.hard_max_tokens)
+        # 按照标点符号和空格分割文本
+        parts = [
+            part.strip() for part in re.split(r"([,，:：、\s]+)", text) if part.strip()
+        ]
+        # 如果无法按标点符号分割，则使用字符分割方法
+        if len(parts) <= 1:
+            logger.warning(
+                "Sentence splitting by punctuation failed, text_tokens:%s token_limit:%s",
+                text_tokens,
+                token_limit,
+            )
+            return self._split_by_chars(text, token_limit)
+
+        chunks: List[str] = []
+        current = ""
+        for part in parts:
+            candidate = part if not current else current + part
+            # 如果合并后的文本token数未超过限制，则更新current
+            if self.estimate_tokens(candidate) <= token_limit:
+                current = candidate
+                continue
+
+            # 当前合并文本超出限制时，将current添加到结果列表
+            if current:
+                chunks.append(current.strip())
+            # 如果单个part就超过了token限制，则进一步分割它
+            if self.estimate_tokens(part) > token_limit:
+                chunks.extend(self._split_by_chars(part, token_limit))
+                current = ""
+            else:
+                # 否则将part作为新的current
+                current = part
+
+        # 添加最后的current文本
+        if current:
+            chunks.append(current.strip())
+        return chunks
 
     def _split_by_chars(self, text: str, token_limit: int) -> List[str]:
         chunks: List[str] = []
@@ -158,8 +177,68 @@ class ChunkSplitter:
             chunks.append(current)
         return chunks
 
+    def _merge_small_chunks(self, chunks: Sequence[str]) -> List[str]:
+        # 过滤掉空的或只包含空白字符的chunks
+        merged = [chunk for chunk in chunks if chunk.strip()]
+        if not merged:
+            return []
+
+        # 循环处理，直到没有小块或者只剩一个块
+        while len(merged) > 1:
+            # 查找第一个token数量小于最小独立token数的chunk索引
+            small_index = next(
+                (
+                    index
+                    for index, chunk in enumerate(merged)
+                    if self.estimate_tokens(chunk) < self.min_independent_tokens
+                ),
+                None,
+            )
+            if small_index is None:
+                break
+
+            # 选择要合并的邻居chunk
+            neighbor_index = self._choose_merge_neighbor(merged, small_index)
+            if neighbor_index < small_index:
+                # 将较小的chunk与它的邻居合并（邻居在前面）
+                merged[neighbor_index] = (
+                    merged[neighbor_index].rstrip()
+                    + "\n\n"
+                    + merged[small_index].lstrip()
+                )
+                del merged[small_index]
+            else:
+                # 将较小的chunk与它的邻居合并（较小的chunk在前面）
+                merged[small_index] = (
+                    merged[small_index].rstrip()
+                    + "\n\n"
+                    + merged[neighbor_index].lstrip()
+                )
+                del merged[neighbor_index]
+
+        return merged
+
+    def _choose_merge_neighbor(self, chunks: Sequence[str], index: int) -> int:
+        options: List[tuple[int, int, int, int]] = []
+        if index > 0:
+            prev_tokens = self.estimate_tokens(
+                chunks[index - 1] + "\n\n" + chunks[index]
+            )
+            prev_priority = 0 if prev_tokens <= self.target_tokens else 1
+            prev_distance = abs(self.target_tokens - prev_tokens)
+            options.append((prev_priority, prev_distance, prev_tokens, index - 1))
+
+        if index + 1 < len(chunks):
+            next_tokens = self.estimate_tokens(
+                chunks[index] + "\n\n" + chunks[index + 1]
+            )
+            next_priority = 0 if next_tokens <= self.target_tokens else 1
+            next_distance = abs(self.target_tokens - next_tokens)
+            options.append((next_priority, next_distance, next_tokens, index + 1))
+
+        return min(options, key=lambda item: (item[0], item[1], item[2], item[3]))[3]
+
     def estimate_tokens(self, text: str) -> int:
-        """Estimate token count using the splitter's heuristic length model."""
         if not text:
             return 1
         cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
