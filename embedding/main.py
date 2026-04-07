@@ -8,7 +8,7 @@ from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
 from embedding.infra.logger import setup_logger
 from embedding.infra.model_cache import initialize_model_cache
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.document_service import process_doc
+from embedding.services.document_service import build_doc_candidates, process_doc
 from embedding.services.query_service import process_query
 import os
 
@@ -20,13 +20,16 @@ DATA_SETS = ["scifact_v1", "hotpotqa_distractor_v1", "msmarco_v1", "trec_car_v1"
 def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedding):
     model_path = config.model.model_id.replace("/", "_")
     output_dir = Path(OUTPUT_ROOT) / model_path / dataset_name
+    candidates_path = Path(OUTPUT_ROOT) / f"{dataset_name}_candidates.jsonl"
 
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
     output_writer = OutputWriter(output_dir, config.experiment.embedding_dim)
     max_length = config.experiment.max_length
     try:
-        process_doc(embedding, ds_context.docs_path, max_length, output_writer)
+        if not candidates_path.exists():
+            build_doc_candidates(ds_context.docs_path, candidates_path, max_length)
+        process_doc(embedding, candidates_path, output_writer)
         process_query(embedding, ds_context.queries_path, output_writer)
     finally:
         output_writer.close()

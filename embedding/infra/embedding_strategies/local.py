@@ -29,13 +29,15 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
                 trust_remote_code=model.trust_remote_code,
             )
             if hasattr(encoder, "max_seq_length"):
-                encoder.max_seq_length = int(self.experiment.max_length)
+                encoder.max_seq_length = self._resolve_effective_max_length(
+                    getattr(encoder, "max_seq_length", None)
+                )
             logger.info(
                 "Initializing sentence_transformers model=%s requested_device=%s batch_size=%s max_seq_length=%s trust_remote_code=%s",
                 model.model_id,
                 self.inference.device,
                 self.inference.batch_size,
-                getattr(encoder, "max_seq_length", None),
+                encoder.max_seq_length,
                 model.trust_remote_code,
             )
             return ("sentence_transformers", encoder)
@@ -110,76 +112,12 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         )
         raise RuntimeError("Unsupported local provider=%r" % self.model.provider)
 
-    def describe_input_lengths(self, texts, is_query):
-        prepared = self._prepare_texts(texts, is_query=is_query)
-        if not prepared:
-            return super().describe_input_lengths(texts, is_query=is_query)
-
-        _provider, encoder = self._encoder
-        tokenizer = self._resolve_tokenizer(encoder)
-        if tokenizer is None:
-            return {
-                "token_stats_available": False,
-                "max_prepared_tokens": None,
-                "avg_prepared_tokens": None,
-                "prepared_over_limit_count": None,
-            }
-
+    def _resolve_effective_max_length(self, encoder_limit) -> int:
+        requested = int(self.experiment.max_length)
         try:
-            payload = tokenizer(
-                prepared,
-                add_special_tokens=True,
-                truncation=False,
-                padding=False,
-            )
-        except Exception:
-            logger.warning(
-                "Failed to collect tokenizer length stats model=%s",
-                self.model.model_id,
-            )
-            return {
-                "token_stats_available": False,
-                "max_prepared_tokens": None,
-                "avg_prepared_tokens": None,
-                "prepared_over_limit_count": None,
-            }
-
-        input_ids = payload.get("input_ids") if isinstance(payload, dict) else None
-        if not isinstance(input_ids, list):
-            return {
-                "token_stats_available": False,
-                "max_prepared_tokens": None,
-                "avg_prepared_tokens": None,
-                "prepared_over_limit_count": None,
-            }
-
-        lengths = [len(ids) for ids in input_ids]
-        if not lengths:
-            return {
-                "token_stats_available": False,
-                "max_prepared_tokens": None,
-                "avg_prepared_tokens": None,
-                "prepared_over_limit_count": None,
-            }
-
-        max_length = int(self.experiment.max_length)
-        return {
-            "token_stats_available": True,
-            "max_prepared_tokens": max(lengths),
-            "avg_prepared_tokens": float(sum(lengths)) / float(len(lengths)),
-            "prepared_over_limit_count": sum(
-                1 for length in lengths if length > max_length
-            ),
-        }
-
-    def _resolve_tokenizer(self, encoder):
-        tokenizer = getattr(encoder, "tokenizer", None)
-        if tokenizer is not None:
-            return tokenizer
-
-        first_module_getter = getattr(encoder, "_first_module", None)
-        if callable(first_module_getter):
-            first_module = first_module_getter()
-            return getattr(first_module, "tokenizer", None)
-
-        return None
+            resolved = int(encoder_limit)
+        except (TypeError, ValueError):
+            resolved = 0
+        if resolved > 0:
+            return min(requested, resolved)
+        return requested

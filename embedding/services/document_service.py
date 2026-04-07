@@ -1,7 +1,9 @@
+import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple
 from time import perf_counter
+from typing import Any, Dict, Iterator, List
+
 import numpy as np
 
 from embedding.domain.exceptions import ProcessingError
@@ -16,29 +18,85 @@ logger = logging.getLogger(__name__)
 DOC_WINDOW_SIZE = 3000
 
 
+def build_doc_candidates(doc_path: Path, output_path: Path, max_length: int) -> None:
+    splitter = ChunkSplitter(max_length=max_length)
+    doc_count = 0
+    total_candidates = 0
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as fout:
+        for line_num, obj in read_objects(doc_path):
+            doc_id = str(obj.get("doc_id", "")).strip()
+            doc_text = _normalize_doc_text(obj.get("doc_text"))
+            if not doc_id or not doc_text:
+                logger.error(
+                    "docs_path=%s line_num=%s id=%r, id/text must be non-empty",
+                    doc_path,
+                    line_num,
+                    doc_id,
+                )
+                raise ProcessingError(
+                    "Invalid docs input docs_path=%s line_num=%s doc_id=%r"
+                    % (doc_path, line_num, doc_id)
+                )
+            try:
+                candidate_chunks = splitter.split_to_candidates(doc_text)
+            except Exception as exc:
+                logger.exception(
+                    "doc split to chunks failed, path=%s line_num=%s doc_id=%s error_type=%s",
+                    doc_path,
+                    line_num,
+                    doc_id,
+                    type(exc).__name__,
+                )
+                raise ProcessingError(
+                    "doc split to chunks failed, path=%s line_num=%s doc_id=%s"
+                    % (doc_path, line_num, doc_id)
+                ) from exc
+
+            fout.write(
+                json.dumps(
+                    {
+                        "doc_id": doc_id,
+                        "candidate_count": len(candidate_chunks),
+                        "candidates": candidate_chunks,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            doc_count += 1
+            total_candidates += len(candidate_chunks)
+
+    logger.info(
+        "doc candidates docs_path=%s doc_count=%s chunk_count=%s",
+        doc_path,
+        doc_count,
+        total_candidates,
+    )
+
+
 def process_doc(
-    embedding: EmbeddingStrategy, doc_path: Path, max_length: int, output: OutputWriter
+    embedding: EmbeddingStrategy, candidates_path: Path, output: OutputWriter
 ) -> None:
     run_start = perf_counter()
-    splitter = ChunkSplitter(max_length=max_length)
     total_selected_chunks = 0
-    read_iter = iter(read_objects(doc_path))
+    read_iter = (obj for _line_num, obj in read_objects(candidates_path))
 
     while True:
-        docs_window, chunk_candicates = _collect_doc_window(
-            read_iter, splitter, DOC_WINDOW_SIZE, doc_path
+        docs_window, chunk_candidates = _collect_doc_window(
+            read_iter, DOC_WINDOW_SIZE, candidates_path
         )
         if not docs_window:
             break
 
         total_selected_chunks += _process_doc_window(
-            embedding, splitter, docs_window, chunk_candicates, output
+            embedding, docs_window, chunk_candidates, output
         )
 
-    output.close()
     if total_selected_chunks == 0:
-        logger.error("No docs chunks found in %s", doc_path)
-        raise ProcessingError(f"No documents found in {doc_path}")
+        logger.error("No docs chunks found in %s", candidates_path)
+        raise ProcessingError(f"No documents found in {candidates_path}")
 
     elapsed_sec = perf_counter() - run_start
     logger.info(
@@ -50,49 +108,20 @@ def process_doc(
 
 
 def _collect_doc_window(
-    read_iter: Iterator[Tuple[int, Dict[str, Any]]],
-    splitter: ChunkSplitter,
+    read_iter: Iterator[Dict[str, Any]],
     doc_window_size: int,
-    doc_path: Path,
+    candidates_path: Path,
 ) -> tuple[List[Dict[str, Any]], List[str]]:
     docs_window: List[Dict[str, Any]] = []
     window_chunk_texts: List[str] = []
 
     while len(docs_window) < doc_window_size:
         try:
-            line_num, obj = next(read_iter)
+            obj = next(read_iter)
         except StopIteration:
             break
 
-        doc_id = str(obj.get("doc_id", "")).strip()
-        doc_text = _normalize_doc_text(obj.get("doc_text"))
-        if not doc_id or not doc_text:
-            logger.error(
-                "docs_path=%s line_num=%s id=%r, id/text must be non-empty",
-                doc_path,
-                line_num,
-                doc_id,
-            )
-            raise ProcessingError(
-                "Invalid docs input docs_path=%s line_num=%s doc_id=%r"
-                % (doc_path, line_num, doc_id)
-            )
-
-        try:
-            candidate_chunks = splitter.split_to_candidates(doc_text)
-        except Exception as exc:
-            logger.exception(
-                "doc split to chunks failed, path=%s line_num=%s doc_id=%s error_type=%s",
-                doc_path,
-                line_num,
-                doc_id,
-                type(exc).__name__,
-            )
-            raise ProcessingError(
-                "doc split to chunks failed, path=%s line_num=%s doc_id=%s"
-                % (doc_path, line_num, doc_id)
-            ) from exc
-
+        candidate_chunks = obj["candidates"]
         chunk_start = len(window_chunk_texts)
         for chunk in candidate_chunks:
             window_chunk_texts.append(str(chunk["text"]))
@@ -100,55 +129,40 @@ def _collect_doc_window(
 
         docs_window.append(
             {
-                "doc_id": doc_id,
-                "line_num": line_num,
+                "doc_id": obj["doc_id"],
                 "candidates": candidate_chunks,
                 "chunk_start": chunk_start,
                 "chunk_end": chunk_end,
             }
         )
     logger.info(
-        f"  1-docs collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
+        "  1-docs collected, candidates_path=%s doc_count=%s chunk_count=%s",
+        candidates_path,
+        len(docs_window),
+        len(window_chunk_texts),
     )
     return docs_window, window_chunk_texts
 
 
 def _process_doc_window(
     embedding: EmbeddingStrategy,
-    splitter: ChunkSplitter,
     docs_window: List[Dict[str, Any]],
-    chunk_candicates: List[str],
+    chunk_candidates: List[str],
     output: OutputWriter,
 ) -> int:
-    if not chunk_candicates:
-        return 0
     embed_start = perf_counter()
     start_doc_id = str(docs_window[0]["doc_id"])
     end_doc_id = str(docs_window[-1]["doc_id"])
-    chunks_count = len(chunk_candicates)
-    chunk_length_stats = _chunk_token_stats(
-        chunk_candicates, splitter, splitter.hard_max_tokens
-    )
-    prepared_length_stats = _describe_input_lengths(
-        embedding, chunk_candicates, is_query=False
-    )
+    chunks_count = len(chunk_candidates)
 
     try:
-        vectors = embedding.encode(chunk_candicates, is_query=False)
+        vectors = embedding.encode(chunk_candidates, is_query=False)
     except Exception as exc:
         logger.exception(
-            "docs embedding batch failed, start_doc_id=%s end_doc_id=%s chunk_count=%s configured_max_length_tokens=%s max_chunk_estimated_tokens=%s avg_chunk_estimated_tokens=%.1f estimated_chunk_over_limit_count=%s token_stats_available=%s max_prepared_tokens=%s avg_prepared_tokens=%s prepared_over_limit_count=%s error_type=%s",
+            "docs embedding batch failed, start_doc_id=%s end_doc_id=%s chunk_count=%s error_type=%s",
             start_doc_id,
             end_doc_id,
             chunks_count,
-            splitter.hard_max_tokens,
-            chunk_length_stats["max_chunk_estimated_tokens"],
-            chunk_length_stats["avg_chunk_estimated_tokens"],
-            chunk_length_stats["estimated_chunk_over_limit_count"],
-            prepared_length_stats["token_stats_available"],
-            prepared_length_stats["max_prepared_tokens"],
-            prepared_length_stats["avg_prepared_tokens"],
-            prepared_length_stats["prepared_over_limit_count"],
             type(exc).__name__,
         )
         raise ProcessingError(
@@ -170,17 +184,9 @@ def _process_doc_window(
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "  2-docs embedding, dim=%s chunks=%s configured_max_length_tokens=%s max_chunk_estimated_tokens=%s avg_chunk_estimated_tokens=%.1f estimated_chunk_over_limit_count=%s token_stats_available=%s max_prepared_tokens=%s avg_prepared_tokens=%s prepared_over_limit_count=%s total_sec:%.3f, avg_ms:%.3f",
+        "  2-docs embedding, dim=%s chunks=%s total_sec:%.3f, avg_ms:%.3f",
         vectors.shape[1],
         chunks_count,
-        splitter.hard_max_tokens,
-        chunk_length_stats["max_chunk_estimated_tokens"],
-        chunk_length_stats["avg_chunk_estimated_tokens"],
-        chunk_length_stats["estimated_chunk_over_limit_count"],
-        prepared_length_stats["token_stats_available"],
-        prepared_length_stats["max_prepared_tokens"],
-        prepared_length_stats["avg_prepared_tokens"],
-        prepared_length_stats["prepared_over_limit_count"],
         elapsed_sec,
         elapsed_sec * 1000 / chunks_count,
     )
@@ -188,8 +194,8 @@ def _process_doc_window(
     total_selected_chunks = 0
 
     for doc in docs_window:
-        chunk_candicates = doc["candidates"]
-        if not chunk_candicates:
+        doc_candidates = doc["candidates"]
+        if not doc_candidates:
             continue
 
         chunk_start = int(doc["chunk_start"])
@@ -197,17 +203,15 @@ def _process_doc_window(
         chunk_vectors = vector_matrix[chunk_start:chunk_end]
         doc_id = doc["doc_id"]
         try:
-            selected = select_from_embeddings(doc_id, chunk_candicates, chunk_vectors)
+            selected = select_from_embeddings(doc_id, doc_candidates, chunk_vectors)
         except Exception as exc:
             logger.exception(
-                "docs chunk selection failed doc_id=%s line_num=%s error_type=%s",
+                "docs chunk selection failed doc_id=%s error_type=%s",
                 doc_id,
-                doc["line_num"],
                 type(exc).__name__,
             )
             raise ProcessingError(
-                "docs chunk selection failed doc_id=%s line_num=%s"
-                % (doc_id, doc["line_num"])
+                "docs chunk selection failed doc_id=%s" % doc_id
             ) from exc
 
         if selected:
@@ -221,55 +225,6 @@ def _process_doc_window(
         write_elapsed_sec,
     )
     return total_selected_chunks
-
-
-def _chunk_token_stats(
-    chunks: List[str], splitter: ChunkSplitter, max_length: int
-) -> dict[str, int | float]:
-    if not chunks:
-        return {
-            "max_chunk_estimated_tokens": 0,
-            "avg_chunk_estimated_tokens": 0.0,
-            "estimated_chunk_over_limit_count": 0,
-        }
-
-    lengths = [splitter.estimate_tokens(chunk) for chunk in chunks]
-    return {
-        "max_chunk_estimated_tokens": max(lengths),
-        "avg_chunk_estimated_tokens": float(sum(lengths)) / float(len(lengths)),
-        "estimated_chunk_over_limit_count": sum(
-            1 for length in lengths if length > max_length
-        ),
-    }
-
-
-def _describe_input_lengths(
-    embedding: EmbeddingStrategy, texts: List[str], *, is_query: bool
-) -> dict[str, int | float | bool | None]:
-    describe = getattr(embedding, "describe_input_lengths", None)
-    if not callable(describe):
-        return {
-            "token_stats_available": False,
-            "max_prepared_tokens": None,
-            "avg_prepared_tokens": None,
-            "prepared_over_limit_count": None,
-        }
-
-    stats = describe(texts, is_query=is_query)
-    if not isinstance(stats, dict):
-        return {
-            "token_stats_available": False,
-            "max_prepared_tokens": None,
-            "avg_prepared_tokens": None,
-            "prepared_over_limit_count": None,
-        }
-
-    return {
-        "token_stats_available": bool(stats.get("token_stats_available", False)),
-        "max_prepared_tokens": stats.get("max_prepared_tokens"),
-        "avg_prepared_tokens": stats.get("avg_prepared_tokens"),
-        "prepared_over_limit_count": stats.get("prepared_over_limit_count"),
-    }
 
 
 def _normalize_doc_text(value: Any) -> List[str]:

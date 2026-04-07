@@ -268,6 +268,37 @@ class TestHttpEmbeddingStrategy:
 
 
 class TestLocalEmbeddingStrategy:
+    def test_sentence_transformers_uses_lower_encoder_max_seq_length(self):
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device, trust_remote_code=False):
+                self.max_seq_length = 128
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
+
+        with _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        ) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
+            )
+
+            assert strategy._encoder[1].max_seq_length == 128
+
     def test_sentence_transformers_describe_input_lengths_uses_tokenizer(self):
         class DummyTokenizer:
             def __call__(
