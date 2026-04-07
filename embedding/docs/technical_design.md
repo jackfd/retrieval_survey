@@ -45,6 +45,7 @@
   - 从 `dataset.json` 加载数据集上下文和文件路径
 - `infra/embedding_strategies/*`
   - 根据 YAML 配置选择本地/HTTP 嵌入策略
+  - `sentence_transformers` 本地运行栈默认固定在 `sentence-transformers==3.4.1` 与 `transformers==4.48.2`
 - `infra/model_cache.py`
   - 为下载的模型初始化稳定的缓存目录
 - `services/chunk_selector.py`
@@ -108,9 +109,12 @@
    - 服务层先把原始 `doc_text` 归一化为文本片段序列：`str -> [str]`，`list[str] -> 过滤空项后的有序片段序列`
    - 该归一化仅是输入适配，不声明 `list[str]` 元素等于 sentence
 6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按 `inference.batch_size` 完成推理层分批。
+   - 本地 provider 会在初始化后探测模型真实支持的上下文上限，并取 `min(experiment.max_length, detected_model_limit)` 作为运行时生效上限
+   - `ChunkSplitter.hard_max_tokens` 与本地 provider 的 `max_seq_length` 都应使用该生效上限，而不是盲信 YAML 中的原始配置值
+   - `Alibaba-NLP/gte-multilingual-base` 当前不支持 `transformers 5.x`；本项目默认通过固定 `sentence-transformers==3.4.1` 与 `transformers==4.48.2` 规避该远程实现兼容性问题
    - 运行日志默认记录 chunk 的估算 token 统计，而不是字符数统计
    - `ChunkSplitter` 的 token 长度是启发式估算，不等同于模型 tokenizer 的精确长度
-   - 本地 provider 可在可访问 tokenizer 时额外记录 prepared input 的真实 token 统计；HTTP provider 默认不提供该统计
+   - 本地 provider 可在可访问 tokenizer 时额外记录 prepared input 的真实 token 统计，并基于生效上限计算 over-limit 计数；HTTP provider 默认不提供该统计
 7. 返回的大矩阵按文档 offset 切回单篇文档，对每篇文档的候选向量统一做 L2 归一化。
 8. 对单篇文档的全部候选向量做均值 pooling，再归一化，得到 `doc_centroid`。
 9. 计算 `rep_score = cosine(chunk_emb, doc_centroid)`。
@@ -121,7 +125,7 @@
 
 默认参数：
 
-- `hard_max_tokens = 8092`
+- `hard_max_tokens = min(experiment.max_length, detected_model_limit)`；未探测到模型上限时回退到 `experiment.max_length`
 - `target_tokens = min(1200, max(400, int(hard_max_tokens * 0.5)))`
 - `top_n = 3`
 - `mmr_lambda = 0.7`

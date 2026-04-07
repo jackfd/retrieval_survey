@@ -10,7 +10,6 @@ MODEL_CACHE_ENV_VARS = {
     "HF_HOME": "hf_home",
     "HF_HUB_CACHE": "hf_hub",
     "HUGGINGFACE_HUB_CACHE": "hf_hub",
-    "TRANSFORMERS_CACHE": "transformers",
     "SENTENCE_TRANSFORMERS_HOME": "sentence_transformers",
 }
 

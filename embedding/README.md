@@ -40,6 +40,11 @@
 - `PyYAML`
 - `pyproject.toml` 或 `requirements/base.txt` 中定义的其他运行时依赖
 
+本地 `sentence_transformers` 运行环境约束：
+
+- 安装入口应使用 `requirements/st.txt` 或 `pyproject.toml` 的 `st` extra，对应固定组合为 `sentence-transformers==3.4.1` 与 `transformers==4.48.2`
+- 不要将 `Alibaba-NLP/gte-multilingual-base` 运行在 `transformers 5.x` 上；该模型的远程实现与 `transformers>=5` 的加载语义存在已知兼容性问题
+
 ## 命令行接口
 
 ```bash
@@ -67,6 +72,7 @@ retrieval-embedding --dataset-path datasets --config-path model_config.yaml
 - 首次运行时，模型会下载到共享的缓存目录中。
 - 后续运行会重用相同的本地缓存，避免重复下载。
 - 设置 `RETRIEVAL_SURVEY_MODEL_CACHE_DIR` 可更改缓存根目录。
+- 本项目默认通过 `HF_HOME`、`HF_HUB_CACHE` 和 `SENTENCE_TRANSFORMERS_HOME` 管理模型缓存，不再主动设置已弃用的 `TRANSFORMERS_CACHE`。
 
 预热工作流程：
 

@@ -23,7 +23,8 @@ dependencies = [
 
 [project.optional-dependencies]
 st = [
-  "transformers>=4.48",
+  "sentence-transformers==3.4.1",
+  "transformers==4.48.2",
 ]
 flag = [
   "FlagEmbedding==1.3.5",
