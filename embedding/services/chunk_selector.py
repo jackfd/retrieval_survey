@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 from typing import Dict, List, Sequence
-
 import numpy as np
-
-from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 

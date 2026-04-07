@@ -32,7 +32,7 @@ def process_doc(
             break
 
         total_selected_chunks += _process_doc_window(
-            embedding, docs_window, chunk_candicates, output
+            embedding, splitter, docs_window, chunk_candicates, output
         )
 
     output.close()
@@ -115,6 +115,7 @@ def _collect_doc_window(
 
 def _process_doc_window(
     embedding: EmbeddingStrategy,
+    splitter: ChunkSplitter,
     docs_window: List[Dict[str, Any]],
     chunk_candicates: List[str],
     output: OutputWriter,
@@ -125,18 +126,29 @@ def _process_doc_window(
     start_doc_id = str(docs_window[0]["doc_id"])
     end_doc_id = str(docs_window[-1]["doc_id"])
     chunks_count = len(chunk_candicates)
-    max_chunk_chars, avg_chunk_chars = _chunk_char_stats(chunk_candicates)
+    chunk_length_stats = _chunk_token_stats(
+        chunk_candicates, splitter, splitter.hard_max_tokens
+    )
+    prepared_length_stats = _describe_input_lengths(
+        embedding, chunk_candicates, is_query=False
+    )
 
     try:
         vectors = embedding.encode(chunk_candicates, is_query=False)
     except Exception as exc:
         logger.exception(
-            "docs embedding batch failed, start_doc_id=%s end_doc_id=%s chunk_count=%s max_chunk_chars=%s avg_chunk_chars=%.1f error_type=%s",
+            "docs embedding batch failed, start_doc_id=%s end_doc_id=%s chunk_count=%s configured_max_length_tokens=%s max_chunk_estimated_tokens=%s avg_chunk_estimated_tokens=%.1f estimated_chunk_over_limit_count=%s token_stats_available=%s max_prepared_tokens=%s avg_prepared_tokens=%s prepared_over_limit_count=%s error_type=%s",
             start_doc_id,
             end_doc_id,
             chunks_count,
-            max_chunk_chars,
-            avg_chunk_chars,
+            splitter.hard_max_tokens,
+            chunk_length_stats["max_chunk_estimated_tokens"],
+            chunk_length_stats["avg_chunk_estimated_tokens"],
+            chunk_length_stats["estimated_chunk_over_limit_count"],
+            prepared_length_stats["token_stats_available"],
+            prepared_length_stats["max_prepared_tokens"],
+            prepared_length_stats["avg_prepared_tokens"],
+            prepared_length_stats["prepared_over_limit_count"],
             type(exc).__name__,
         )
         raise ProcessingError(
@@ -158,10 +170,17 @@ def _process_doc_window(
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "  2-docs embedding, dim=%s chunks=%s max_chunk_chars=%s, total_sec:%.3f, avg_ms:%.3f",
+        "  2-docs embedding, dim=%s chunks=%s configured_max_length_tokens=%s max_chunk_estimated_tokens=%s avg_chunk_estimated_tokens=%.1f estimated_chunk_over_limit_count=%s token_stats_available=%s max_prepared_tokens=%s avg_prepared_tokens=%s prepared_over_limit_count=%s total_sec:%.3f, avg_ms:%.3f",
         vectors.shape[1],
         chunks_count,
-        max_chunk_chars,
+        splitter.hard_max_tokens,
+        chunk_length_stats["max_chunk_estimated_tokens"],
+        chunk_length_stats["avg_chunk_estimated_tokens"],
+        chunk_length_stats["estimated_chunk_over_limit_count"],
+        prepared_length_stats["token_stats_available"],
+        prepared_length_stats["max_prepared_tokens"],
+        prepared_length_stats["avg_prepared_tokens"],
+        prepared_length_stats["prepared_over_limit_count"],
         elapsed_sec,
         elapsed_sec * 1000 / chunks_count,
     )
@@ -204,12 +223,53 @@ def _process_doc_window(
     return total_selected_chunks
 
 
-def _chunk_char_stats(chunks: List[str]) -> tuple[int, float]:
+def _chunk_token_stats(
+    chunks: List[str], splitter: ChunkSplitter, max_length: int
+) -> dict[str, int | float]:
     if not chunks:
-        return 0, 0.0
+        return {
+            "max_chunk_estimated_tokens": 0,
+            "avg_chunk_estimated_tokens": 0.0,
+            "estimated_chunk_over_limit_count": 0,
+        }
 
-    lengths = [len(chunk) for chunk in chunks]
-    return max(lengths), float(sum(lengths)) / float(len(lengths))
+    lengths = [splitter.estimate_tokens(chunk) for chunk in chunks]
+    return {
+        "max_chunk_estimated_tokens": max(lengths),
+        "avg_chunk_estimated_tokens": float(sum(lengths)) / float(len(lengths)),
+        "estimated_chunk_over_limit_count": sum(
+            1 for length in lengths if length > max_length
+        ),
+    }
+
+
+def _describe_input_lengths(
+    embedding: EmbeddingStrategy, texts: List[str], *, is_query: bool
+) -> dict[str, int | float | bool | None]:
+    describe = getattr(embedding, "describe_input_lengths", None)
+    if not callable(describe):
+        return {
+            "token_stats_available": False,
+            "max_prepared_tokens": None,
+            "avg_prepared_tokens": None,
+            "prepared_over_limit_count": None,
+        }
+
+    stats = describe(texts, is_query=is_query)
+    if not isinstance(stats, dict):
+        return {
+            "token_stats_available": False,
+            "max_prepared_tokens": None,
+            "avg_prepared_tokens": None,
+            "prepared_over_limit_count": None,
+        }
+
+    return {
+        "token_stats_available": bool(stats.get("token_stats_available", False)),
+        "max_prepared_tokens": stats.get("max_prepared_tokens"),
+        "avg_prepared_tokens": stats.get("avg_prepared_tokens"),
+        "prepared_over_limit_count": stats.get("prepared_over_limit_count"),
+    }
 
 
 def _normalize_doc_text(value: Any) -> List[str]:

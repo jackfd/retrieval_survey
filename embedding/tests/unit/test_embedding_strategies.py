@@ -74,3 +74,14 @@ def test_prepare_texts_supports_instruction_template_prefix_mode():
     assert strategy._prepare_texts(["文档"], is_query=False) == [
         "Encode for retrieval: D: 文档"
     ]
+
+
+def test_describe_input_lengths_defaults_to_unavailable_token_stats():
+    strategy = _make_strategy()
+
+    assert strategy.describe_input_lengths(["文档"], is_query=False) == {
+        "token_stats_available": False,
+        "max_prepared_tokens": None,
+        "avg_prepared_tokens": None,
+        "prepared_over_limit_count": None,
+    }

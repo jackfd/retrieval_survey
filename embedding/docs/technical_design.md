@@ -108,6 +108,9 @@
    - 服务层先把原始 `doc_text` 归一化为文本片段序列：`str -> [str]`，`list[str] -> 过滤空项后的有序片段序列`
    - 该归一化仅是输入适配，不声明 `list[str]` 元素等于 sentence
 6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按 `inference.batch_size` 完成推理层分批。
+   - 运行日志默认记录 chunk 的估算 token 统计，而不是字符数统计
+   - `ChunkSplitter` 的 token 长度是启发式估算，不等同于模型 tokenizer 的精确长度
+   - 本地 provider 可在可访问 tokenizer 时额外记录 prepared input 的真实 token 统计；HTTP provider 默认不提供该统计
 7. 返回的大矩阵按文档 offset 切回单篇文档，对每篇文档的候选向量统一做 L2 归一化。
 8. 对单篇文档的全部候选向量做均值 pooling，再归一化，得到 `doc_centroid`。
 9. 计算 `rep_score = cosine(chunk_emb, doc_centroid)`。

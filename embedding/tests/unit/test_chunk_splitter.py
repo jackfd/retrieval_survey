@@ -16,15 +16,21 @@ def _load_chunk_splitter_module(monkeypatch: pytest.MonkeyPatch, offsets_fn=None
         fake_blingfire.text_to_sentences_and_offsets = offsets_fn
         monkeypatch.setitem(sys.modules, "blingfire", fake_blingfire)
 
-    splitter_path = Path(__file__).resolve().parents[2] / "services" / "chunk_splitter.py"
-    splitter_spec = importlib.util.spec_from_file_location("chunk_splitter", splitter_path)
+    splitter_path = (
+        Path(__file__).resolve().parents[2] / "services" / "chunk_splitter.py"
+    )
+    splitter_spec = importlib.util.spec_from_file_location(
+        "chunk_splitter", splitter_path
+    )
     splitter_module = importlib.util.module_from_spec(splitter_spec)
     assert splitter_spec.loader is not None
     splitter_spec.loader.exec_module(splitter_module)
     return splitter_module
 
 
-def test_split_to_candidates_merges_consecutive_list_items(monkeypatch: pytest.MonkeyPatch):
+def test_split_to_candidates_merges_consecutive_list_items(
+    monkeypatch: pytest.MonkeyPatch,
+):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter()
     splitter.target_tokens = 10_000
@@ -38,7 +44,9 @@ def test_split_to_candidates_merges_consecutive_list_items(monkeypatch: pytest.M
     ]
 
 
-def test_split_to_candidates_treats_multi_input_as_blocks(monkeypatch: pytest.MonkeyPatch):
+def test_split_to_candidates_treats_multi_input_as_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+):
     def fake_offsets(_text: str):
         return "", [(0, 3), (4, 7)]
 
@@ -78,7 +86,10 @@ def test_split_to_candidates_splits_single_text_by_sentences_within_limit(
     result = splitter.split_to_candidates(["aaaaaa. bbbbbb. cccccc."])
 
     assert [item["text"] for item in result] == ["aaaaaa.", "bbbbbb.", "cccccc."]
-    assert all(splitter._count_tokens(item["text"]) <= splitter.hard_max_tokens for item in result)
+    assert all(
+        splitter.estimate_tokens(item["text"]) <= splitter.hard_max_tokens
+        for item in result
+    )
 
 
 def test_split_to_candidates_falls_back_to_char_split_within_limit(
@@ -91,7 +102,10 @@ def test_split_to_candidates_falls_back_to_char_split_within_limit(
     result = splitter.split_to_candidates(["abcdefghij"])
 
     assert [item["text"] for item in result] == ["abc", "def", "ghi", "j"]
-    assert all(splitter._count_tokens(item["text"]) <= splitter.hard_max_tokens for item in result)
+    assert all(
+        splitter.estimate_tokens(item["text"]) <= splitter.hard_max_tokens
+        for item in result
+    )
 
 
 def test_split_to_candidates_keeps_equivalent_content_shapes_close(
@@ -128,7 +142,9 @@ def test_split_to_candidates_splits_long_block_inside_multi_input(
     assert [item["text"] for item in result] == ["xx", "aaaa", "bbbb", "yy"]
 
 
-def test_split_sentences_uses_offsets_and_strips_whitespace(monkeypatch: pytest.MonkeyPatch):
+def test_split_sentences_uses_offsets_and_strips_whitespace(
+    monkeypatch: pytest.MonkeyPatch,
+):
     def fake_offsets(_text: str):
         return "", [(0, 8), (8, 17)]
 
@@ -141,7 +157,9 @@ def test_split_sentences_uses_offsets_and_strips_whitespace(monkeypatch: pytest.
     assert result == ["First.", "Second?"]
 
 
-def test_split_oversize_fragment_falls_back_to_char_split(monkeypatch: pytest.MonkeyPatch):
+def test_split_oversize_fragment_falls_back_to_char_split(
+    monkeypatch: pytest.MonkeyPatch,
+):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter(max_length=3)
     splitter.avg_char_per_token = 1
@@ -165,6 +183,15 @@ def test_default_target_tokens_match_public_dataset_defaults(
     assert short_limit_splitter.target_tokens == 300
 
 
+def test_estimate_tokens_matches_internal_length_heuristic(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    splitter_module = _load_chunk_splitter_module(monkeypatch)
+    splitter = splitter_module.ChunkSplitter()
+
+    assert splitter.estimate_tokens("你好ab") == splitter.estimate_tokens("你好ab")
+
+
 def test_split_sentences_english_long_text(monkeypatch: pytest.MonkeyPatch):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter()
@@ -175,7 +202,11 @@ def test_split_sentences_english_long_text(monkeypatch: pytest.MonkeyPatch):
     Text summarization is another exciting area of study; it helps to reduce large documents to essential summaries.
     Many modern systems use deep learning techniques, which have shown remarkable results in various tasks.
     """
-    result = [sentence.strip() for sentence in splitter._split_sentences(text) if sentence.strip()]
+    result = [
+        sentence.strip()
+        for sentence in splitter._split_sentences(text)
+        if sentence.strip()
+    ]
 
     assert len(result) >= 5
     assert result[0].startswith("Natural language processing is a fascinating field")
@@ -183,7 +214,9 @@ def test_split_sentences_english_long_text(monkeypatch: pytest.MonkeyPatch):
     assert all(sentence.endswith((".", "!", "?")) for sentence in result)
 
 
-def test_split_sentences_english_with_numbers_and_periods(monkeypatch: pytest.MonkeyPatch):
+def test_split_sentences_english_with_numbers_and_periods(
+    monkeypatch: pytest.MonkeyPatch,
+):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter()
 
@@ -265,9 +298,15 @@ def test_split_sentences_very_long_english_text(monkeypatch: pytest.MonkeyPatch)
     Cross-validation estimates how well models generalize to unseen data. Evaluation metrics measure model performance.
     Feature engineering transforms raw data into meaningful inputs for models. Deep learning reduces need for manual features.
     """
-    result = [sentence.strip() for sentence in splitter._split_sentences(text) if sentence.strip()]
+    result = [
+        sentence.strip()
+        for sentence in splitter._split_sentences(text)
+        if sentence.strip()
+    ]
 
     assert len(result) >= 20
-    assert result[0].startswith("Machine learning is a branch of artificial intelligence")
+    assert result[0].startswith(
+        "Machine learning is a branch of artificial intelligence"
+    )
     assert result[-1].endswith("manual features.")
     assert all(sentence.endswith((".", "!", "?")) for sentence in result)

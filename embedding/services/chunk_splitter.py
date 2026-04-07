@@ -38,6 +38,7 @@ class ChunkSplitter:
         if not blocks:
             return []
 
+        # 将每个块切分为更小的片段
         chunks: List[str] = []
         for block in blocks:
             chunks.extend(self._split_block(block))
@@ -58,6 +59,7 @@ class ChunkSplitter:
             else fragments
         )
 
+        # 遍历所有文本块，将列表项附加到前一个块而不是作为新块
         blocks: List[str] = []
         for block in raw_blocks:
             if blocks and self._LIST_ITEM_PATTERN.match(block):
@@ -68,7 +70,7 @@ class ChunkSplitter:
 
     def _validate_chunk_limits(self, chunks: Sequence[str]) -> None:
         for index, chunk in enumerate(chunks, start=1):
-            token_count = self._count_tokens(chunk)
+            token_count = self.estimate_tokens(chunk)
             if token_count > self.hard_max_tokens:
                 raise ValueError(
                     "chunk exceeds max_length order=%s token_count=%s max_length=%s"
@@ -76,7 +78,7 @@ class ChunkSplitter:
                 )
 
     def _split_block(self, text: str) -> List[str]:
-        if self._count_tokens(text) <= self.target_tokens:
+        if self.estimate_tokens(text) <= self.target_tokens:
             return [text]
 
         sentences = self._split_sentences(text)
@@ -95,7 +97,7 @@ class ChunkSplitter:
             if not fragment:
                 continue
 
-            fragment_tokens = self._count_tokens(fragment)
+            fragment_tokens = self.estimate_tokens(fragment)
             if fragment_tokens > self.hard_max_tokens:
                 logger.warning("too long fragment, fragment tokens:%s", fragment_tokens)
                 if current:
@@ -105,7 +107,7 @@ class ChunkSplitter:
                 continue
 
             candidate = fragment if not current else current + " " + fragment
-            if self._count_tokens(candidate) <= token_limit:
+            if self.estimate_tokens(candidate) <= token_limit:
                 current = candidate
                 continue
 
@@ -131,7 +133,7 @@ class ChunkSplitter:
         return [sentence for sentence in sentences if sentence]
 
     def _split_oversize_fragment(self, text: str) -> List[str]:
-        text_tokens = self._count_tokens(text)
+        text_tokens = self.estimate_tokens(text)
         if text_tokens <= self.hard_max_tokens:
             return [text]
 
@@ -147,7 +149,7 @@ class ChunkSplitter:
         current = ""
         for char in text:
             candidate = current + char
-            if current and self._count_tokens(candidate) > token_limit:
+            if current and self.estimate_tokens(candidate) > token_limit:
                 chunks.append(current)
                 current = char
             else:
@@ -156,7 +158,8 @@ class ChunkSplitter:
             chunks.append(current)
         return chunks
 
-    def _count_tokens(self, text: str) -> int:
+    def estimate_tokens(self, text: str) -> int:
+        """Estimate token count using the splitter's heuristic length model."""
         if not text:
             return 1
         cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", text))

@@ -128,6 +128,26 @@ def _build_inference_cfg(device="cpu", batch_size=2, *, max_retries=3):
 
 
 class TestHttpEmbeddingStrategy:
+    def test_describe_input_lengths_reports_unavailable_token_stats(self):
+        http_module = _load_http_module()
+        strategy = http_module.HttpEmbeddingStrategy(
+            experiment=_build_experiment_cfg(),
+            inference=Mock(
+                batch_size=2,
+                device="cpu",
+                embedding_api_url="http://test.api/embed",
+                http_timeout=10,
+                http_max_retries=3,
+            ),
+        )
+
+        assert strategy.describe_input_lengths(["hello"], is_query=False) == {
+            "token_stats_available": False,
+            "max_prepared_tokens": None,
+            "avg_prepared_tokens": None,
+            "prepared_over_limit_count": None,
+        }
+
     def test_encode_single_batch_success(self):
         http_module = _load_http_module()
         strategy = http_module.HttpEmbeddingStrategy(
@@ -248,6 +268,83 @@ class TestHttpEmbeddingStrategy:
 
 
 class TestLocalEmbeddingStrategy:
+    def test_sentence_transformers_describe_input_lengths_uses_tokenizer(self):
+        class DummyTokenizer:
+            def __call__(
+                self,
+                texts,
+                add_special_tokens=True,
+                truncation=False,
+                padding=False,
+            ):
+                return {"input_ids": [[1, 2, 3], [1, 2, 3, 4, 5, 6]]}
+
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device, trust_remote_code=False):
+                self.max_seq_length = 0
+                self.tokenizer = DummyTokenizer()
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
+
+        with _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        ) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
+            )
+
+            assert strategy.describe_input_lengths(["a", "b"], is_query=False) == {
+                "token_stats_available": True,
+                "max_prepared_tokens": 6,
+                "avg_prepared_tokens": 4.5,
+                "prepared_over_limit_count": 0,
+            }
+
+    def test_flag_embedding_describe_input_lengths_without_tokenizer_is_unavailable(self):
+        class DummyFlagModel:
+            def __init__(self, model_id, use_fp16):
+                pass
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                max_length,
+                return_dense=None,
+                return_sparse=None,
+                return_colbert_vecs=None,
+            ):
+                return {"dense_vecs": [[3.0, 4.0, 0.0, 0.0] for _ in texts]}
+
+        with _load_local_module(flag_ctor=DummyFlagModel) as local_module:
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(provider="flag_embedding", model_id="bge-m3"),
+            )
+
+            assert strategy.describe_input_lengths(["hello"], is_query=False) == {
+                "token_stats_available": False,
+                "max_prepared_tokens": None,
+                "avg_prepared_tokens": None,
+                "prepared_over_limit_count": None,
+            }
+
     def test_sentence_transformers_provider_initializes_and_encodes(self):
         created = {}
 

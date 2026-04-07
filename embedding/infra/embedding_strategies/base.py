@@ -5,6 +5,7 @@ from embedding.domain.models import ExperimentConfig, InferenceConfig
 
 class EmbeddingStrategy(Protocol):
     def encode(self, texts: List[str], is_query: bool) -> np.ndarray: ...
+    def describe_input_lengths(self, texts: List[str], is_query: bool) -> dict: ...
 
 
 class BaseEmbeddingStrategy:
@@ -34,3 +35,20 @@ class BaseEmbeddingStrategy:
         norms = np.linalg.norm(output, axis=1, keepdims=True)
         norms = np.where(norms == 0.0, 1.0, norms)
         return output / norms
+
+    def describe_input_lengths(self, texts: List[str], is_query: bool) -> dict:
+        prepared = self._prepare_texts(texts, is_query=is_query)
+        if not prepared:
+            return {
+                "token_stats_available": False,
+                "max_prepared_tokens": None,
+                "avg_prepared_tokens": None,
+                "prepared_over_limit_count": None,
+            }
+
+        return {
+            "token_stats_available": False,
+            "max_prepared_tokens": None,
+            "avg_prepared_tokens": None,
+            "prepared_over_limit_count": None,
+        }

@@ -24,13 +24,20 @@ def _chunk(doc_id: str, idx: int) -> dict:
     }
 
 
+def _make_splitter_mock(max_length: int = 256) -> Mock:
+    splitter = Mock()
+    splitter.hard_max_tokens = max_length
+    splitter.estimate_tokens.side_effect = lambda text: len(str(text))
+    return splitter
+
+
 def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     docs = [
         (1, {"doc_id": "d1", "doc_text": "text-1"}),
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
@@ -117,7 +124,7 @@ def test_process_doc_builds_splitter_with_explicit_max_length(
     monkeypatch: pytest.MonkeyPatch,
 ):
     docs = [(1, {"doc_id": "d1", "doc_text": "text-1"})]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     captured: dict[str, object] = {}
 
     def fake_chunk_splitter(*args, **kwargs):
@@ -148,7 +155,7 @@ def test_process_doc_normalizes_string_doc_text_to_single_fragment(
     monkeypatch: pytest.MonkeyPatch,
 ):
     docs = [(1, {"doc_id": "d1", "doc_text": "  text-1  "})]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     splitter.split_to_candidates = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
     embedding = Mock()
     embedding.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
@@ -172,7 +179,7 @@ def test_process_doc_normalizes_list_doc_text_and_filters_empty_items(
     monkeypatch: pytest.MonkeyPatch,
 ):
     docs = [(1, {"doc_id": "d1", "doc_text": [" 第一段 ", " ", "", "第二段"]})]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     splitter.split_to_candidates = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
     embedding = Mock()
     embedding.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
@@ -197,7 +204,7 @@ def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch
         (1, {"doc_id": "d1", "doc_text": "text-1"}),
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
@@ -240,7 +247,7 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
 
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
@@ -259,7 +266,7 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
 
 def test_process_doc_rejects_invalid_doc_text_type(monkeypatch: pytest.MonkeyPatch):
     docs = [(1, {"doc_id": "d1", "doc_text": {"bad": "value"}})]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
 
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
@@ -279,7 +286,7 @@ def test_process_doc_waits_for_full_doc_before_selecting(
         (1, {"doc_id": "d1", "doc_text": "text-1"}),
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
@@ -326,7 +333,7 @@ def test_process_doc_waits_for_full_doc_before_selecting(
 
 def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
     docs = [(1, {"doc_id": "d1", "doc_text": "text-1"})]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     logger = Mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
@@ -353,10 +360,44 @@ def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
         "d1",
         "d1",
         1,
+        256,
         5,
         5.0,
+        0,
+        False,
+        None,
+        None,
+        None,
         "RuntimeError",
     )
+
+
+def test_chunk_token_stats_returns_estimated_token_metrics():
+    splitter = document_service.ChunkSplitter(max_length=10)
+    splitter.avg_char_per_token = 1
+
+    stats = document_service._chunk_token_stats(["ab", "cdef"], splitter, 3)
+
+    assert stats == {
+        "max_chunk_estimated_tokens": 4,
+        "avg_chunk_estimated_tokens": 3.0,
+        "estimated_chunk_over_limit_count": 1,
+    }
+
+
+def test_describe_input_lengths_falls_back_when_strategy_does_not_report():
+    embedding = Mock()
+
+    stats = document_service._describe_input_lengths(
+        embedding, ["chunk"], is_query=False
+    )
+
+    assert stats == {
+        "token_stats_available": False,
+        "max_prepared_tokens": None,
+        "avg_prepared_tokens": None,
+        "prepared_over_limit_count": None,
+    }
 
 
 def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatch):
@@ -365,7 +406,7 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
@@ -404,7 +445,7 @@ def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch)
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
-    splitter = Mock()
+    splitter = _make_splitter_mock()
     monkeypatch.setattr(
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
