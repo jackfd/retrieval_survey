@@ -28,7 +28,6 @@ def test_split_to_candidates_merges_consecutive_list_items(monkeypatch: pytest.M
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter()
     splitter.target_tokens = 10_000
-    splitter.min_independent_tokens = 1
 
     text = "概述段落。\n\n1. 第一项内容。\n\n2. 第二项内容。\n\n收尾段落。"
     result = splitter.split_to_candidates([text])
@@ -39,21 +38,18 @@ def test_split_to_candidates_merges_consecutive_list_items(monkeypatch: pytest.M
     ]
 
 
-def test_split_to_candidates_uses_sentence_list_path_without_sentence_split(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    def fail_offsets(_text: str):
-        raise AssertionError("sentence splitter should not be called for len(text_list) > 1")
+def test_split_to_candidates_treats_multi_input_as_blocks(monkeypatch: pytest.MonkeyPatch):
+    def fake_offsets(_text: str):
+        return "", [(0, 3), (4, 7)]
 
-    splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fail_offsets)
-    splitter = splitter_module.ChunkSplitter()
-    splitter.target_tokens = 1
-    splitter.min_independent_tokens = 1
+    splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fake_offsets)
+    splitter = splitter_module.ChunkSplitter(max_length=3)
+    splitter.avg_char_per_token = 1
 
-    result = splitter.split_to_candidates([" 第一段。 ", " ", "第二段。"])
+    result = splitter.split_to_candidates(["aaa bbb", "cccc"])
 
-    assert [item["text"] for item in result] == ["第一段。", "第二段。"]
-    assert [item["order"] for item in result] == [1, 2]
+    assert [item["order"] for item in result] == [1, 2, 3, 4]
+    assert [item["text"] for item in result] == ["aaa", "bbb", "ccc", "c"]
 
 
 def test_split_to_candidates_keeps_continuous_order_for_multi_input(
@@ -62,7 +58,6 @@ def test_split_to_candidates_keeps_continuous_order_for_multi_input(
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter(max_length=3)
     splitter.avg_char_per_token = 1
-    splitter.min_independent_tokens = 1
 
     result = splitter.split_to_candidates(["aaa", " ", "bbbb", "cc"])
 
@@ -79,7 +74,6 @@ def test_split_to_candidates_splits_single_text_by_sentences_within_limit(
     splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fake_offsets)
     splitter = splitter_module.ChunkSplitter(max_length=7)
     splitter.avg_char_per_token = 1
-    splitter.min_independent_tokens = 1
 
     result = splitter.split_to_candidates(["aaaaaa. bbbbbb. cccccc."])
 
@@ -93,7 +87,6 @@ def test_split_to_candidates_falls_back_to_char_split_within_limit(
     splitter_module = _load_chunk_splitter_module(monkeypatch)
     splitter = splitter_module.ChunkSplitter(max_length=3)
     splitter.avg_char_per_token = 1
-    splitter.min_independent_tokens = 1
 
     result = splitter.split_to_candidates(["abcdefghij"])
 
@@ -101,53 +94,38 @@ def test_split_to_candidates_falls_back_to_char_split_within_limit(
     assert all(splitter._count_tokens(item["text"]) <= splitter.hard_max_tokens for item in result)
 
 
-def test_split_to_candidates_merges_small_chunks_in_public_output(
+def test_split_to_candidates_keeps_equivalent_content_shapes_close(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    splitter_module = _load_chunk_splitter_module(monkeypatch)
-    splitter = splitter_module.ChunkSplitter()
-    splitter.target_tokens = 10
-    splitter.hard_max_tokens = 20
-    splitter.min_independent_tokens = 5
+    def fake_offsets(_text: str):
+        return "", [(0, 4), (5, 9)]
 
-    result = splitter.split_to_candidates(["甲" * 9 + "\n\n" + "乙" * 2 + "\n\n" + "丙" * 6])
-
-    assert result == [
-        {"order": 1, "text": "甲" * 9},
-        {"order": 2, "text": "乙" * 2 + "\n\n" + "丙" * 6},
-    ]
-
-
-def test_split_to_candidates_merges_multi_input_with_spaces(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    splitter_module = _load_chunk_splitter_module(monkeypatch)
-    splitter = splitter_module.ChunkSplitter()
-    splitter.target_tokens = 10
-    splitter.hard_max_tokens = 20
-    splitter.min_independent_tokens = 5
-
-    result = splitter.split_to_candidates(["甲" * 9, "乙" * 2, "丙" * 6])
-
-    assert result == [
-        {"order": 1, "text": "甲" * 9},
-        {"order": 2, "text": "乙" * 2 + " " + "丙" * 6},
-    ]
-
-
-def test_split_to_candidates_raises_when_merged_output_exceeds_limit(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    splitter_module = _load_chunk_splitter_module(monkeypatch)
+    splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fake_offsets)
     splitter = splitter_module.ChunkSplitter(max_length=4)
     splitter.avg_char_per_token = 1
-    splitter.min_independent_tokens = 10
 
-    with pytest.raises(
-        ValueError,
-        match=r"chunk exceeds max_length order=1 token_count=6 max_length=4",
-    ):
-        splitter.split_to_candidates(["ab", "cd"])
+    single = splitter.split_to_candidates(["aaaa\n\nbbbb"])
+    multi = splitter.split_to_candidates(["aaaa", "bbbb"])
+
+    assert [item["text"] for item in single] == ["aaaa", "bbbb"]
+    assert [item["text"] for item in multi] == ["aaaa", "bbbb"]
+
+
+def test_split_to_candidates_splits_long_block_inside_multi_input(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_offsets(text: str):
+        if text == "aaaa bbbb":
+            return "", [(0, 4), (5, 9)]
+        return "", []
+
+    splitter_module = _load_chunk_splitter_module(monkeypatch, offsets_fn=fake_offsets)
+    splitter = splitter_module.ChunkSplitter(max_length=4)
+    splitter.avg_char_per_token = 1
+
+    result = splitter.split_to_candidates(["xx", "aaaa bbbb", "yy"])
+
+    assert [item["text"] for item in result] == ["xx", "aaaa", "bbbb", "yy"]
 
 
 def test_split_sentences_uses_offsets_and_strips_whitespace(monkeypatch: pytest.MonkeyPatch):
@@ -163,30 +141,28 @@ def test_split_sentences_uses_offsets_and_strips_whitespace(monkeypatch: pytest.
     assert result == ["First.", "Second?"]
 
 
-def test_split_long_text_falls_back_to_char_split_when_unsplittable(
-    monkeypatch: pytest.MonkeyPatch,
-):
+def test_split_oversize_fragment_falls_back_to_char_split(monkeypatch: pytest.MonkeyPatch):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
-    splitter = splitter_module.ChunkSplitter()
+    splitter = splitter_module.ChunkSplitter(max_length=3)
     splitter.avg_char_per_token = 1
 
     text = "abcdefghij"
-    chunks = splitter._split_long_text(text, token_limit=3)
+    chunks = splitter._split_oversize_fragment(text)
 
     assert "".join(chunks) == text
     assert all(len(chunk) <= 3 for chunk in chunks)
 
 
-def test_merge_small_chunks_prefers_neighbor_within_target(monkeypatch: pytest.MonkeyPatch):
+def test_default_target_tokens_match_public_dataset_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+):
     splitter_module = _load_chunk_splitter_module(monkeypatch)
+
     splitter = splitter_module.ChunkSplitter()
-    splitter.target_tokens = 10
-    splitter.min_independent_tokens = 5
+    short_limit_splitter = splitter_module.ChunkSplitter(max_length=300)
 
-    chunks = ["甲" * 9, "乙" * 2, "丙" * 6]
-    merged = splitter._merge_small_chunks(chunks)
-
-    assert merged == ["甲" * 9, "乙" * 2 + "\n\n" + "丙" * 6]
+    assert splitter.target_tokens == 1200
+    assert short_limit_splitter.target_tokens == 300
 
 
 def test_split_sentences_english_long_text(monkeypatch: pytest.MonkeyPatch):

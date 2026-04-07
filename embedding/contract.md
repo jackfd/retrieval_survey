@@ -73,13 +73,18 @@ Input files are read from the resolved sub-dataset directory:
 | Field | Type | Required | Constraints |
 |---|---|---|---|
 | `doc_id` | string | Yes | Non-empty; unique in file |
-| `doc_text` | string | Yes | Non-empty after trim |
+| `doc_text` | string | Yes | Non-empty after trim; service layer also accepts `list[string]` as an ordered text-fragment sequence for compatibility |
 
 Example:
 
 ```json
 {"doc_id":"d1","doc_text":"Document body text."}
 ```
+
+Compatibility note:
+
+- When `doc_text` is provided as `list[string]`, each element is treated as an ordered text fragment after trim/filtering.
+- The service layer does not interpret those elements as guaranteed sentence boundaries.
 
 ### `queries.jsonl` (train split only)
 

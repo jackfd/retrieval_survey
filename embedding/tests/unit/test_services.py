@@ -40,6 +40,7 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
         [{"order": 1, "text": "d2-c1"}],
         [{"order": 1, "text": "d3-c1"}, {"order": 2, "text": "d3-c2"}],
     ])
+    splitter.split_to_candidates = build_candidates_mock
     select_from_embeddings_mock = Mock(side_effect=[
         [_chunk("d1", 1), _chunk("d1", 2)],
         [_chunk("d2", 1)],
@@ -58,7 +59,6 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
     monkeypatch.setattr(
         document_service, "select_from_embeddings", select_from_embeddings_mock
     )
@@ -78,7 +78,9 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     ]
     assert embedding.encode.call_args_list[0].kwargs == {"is_query": False}
     assert build_candidates_mock.call_count == 3
-    assert build_candidates_mock.call_args_list[0].args[1] is splitter
+    assert build_candidates_mock.call_args_list[0].args[0] == ["text-1"]
+    assert build_candidates_mock.call_args_list[1].args[0] == ["text-2"]
+    assert build_candidates_mock.call_args_list[2].args[0] == ["text-3"]
     assert select_from_embeddings_mock.call_args_list[0].args[0] == "d1"
     assert select_from_embeddings_mock.call_args_list[1].args[0] == "d2"
     assert select_from_embeddings_mock.call_args_list[2].args[0] == "d3"
@@ -128,11 +130,7 @@ def test_process_doc_builds_splitter_with_explicit_max_length(
 
     monkeypatch.setattr(document_service, "ChunkSplitter", fake_chunk_splitter)
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(
-        document_service,
-        "build_candidates",
-        Mock(return_value=[{"order": 1, "text": "d1-c1"}]),
-    )
+    splitter.split_to_candidates = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
     monkeypatch.setattr(
         document_service,
         "select_from_embeddings",
@@ -144,6 +142,54 @@ def test_process_doc_builds_splitter_with_explicit_max_length(
     document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert captured == {"args": (), "kwargs": {"max_length": 256}}
+
+
+def test_process_doc_normalizes_string_doc_text_to_single_fragment(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    docs = [(1, {"doc_id": "d1", "doc_text": "  text-1  "})]
+    splitter = Mock()
+    splitter.split_to_candidates = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
+    embedding = Mock()
+    embedding.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(
+        document_service,
+        "select_from_embeddings",
+        Mock(return_value=[_chunk("d1", 1)]),
+    )
+
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, Mock())
+
+    splitter.split_to_candidates.assert_called_once_with(["text-1"])
+
+
+def test_process_doc_normalizes_list_doc_text_and_filters_empty_items(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    docs = [(1, {"doc_id": "d1", "doc_text": [" 第一段 ", " ", "", "第二段"]})]
+    splitter = Mock()
+    splitter.split_to_candidates = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
+    embedding = Mock()
+    embedding.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(
+        document_service,
+        "select_from_embeddings",
+        Mock(return_value=[_chunk("d1", 1)]),
+    )
+
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, Mock())
+
+    splitter.split_to_candidates.assert_called_once_with(["第一段", "第二段"])
 
 
 def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch):
@@ -159,6 +205,7 @@ def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch
         [{"order": 1, "text": "d1-c1"}, {"order": 2, "text": "d1-c2"}],
         [{"order": 1, "text": "d2-c1"}],
     ])
+    splitter.split_to_candidates = build_candidates_mock
     select_from_embeddings_mock = Mock(side_effect=[
         [_chunk("d1", 1), _chunk("d1", 2)],
         [_chunk("d2", 1)],
@@ -169,7 +216,6 @@ def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch
     )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
     monkeypatch.setattr(
         document_service, "select_from_embeddings", select_from_embeddings_mock
     )
@@ -199,9 +245,9 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
         document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
     )
     build_candidates_mock = Mock(side_effect=[[], []])
+    splitter.split_to_candidates = build_candidates_mock
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
 
     output = Mock()
 
@@ -209,6 +255,21 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
         document_service.process_doc(Mock(), Path("docs.jsonl"), 256, output)
 
     output.write_doc_chunks.assert_not_called()
+
+
+def test_process_doc_rejects_invalid_doc_text_type(monkeypatch: pytest.MonkeyPatch):
+    docs = [(1, {"doc_id": "d1", "doc_text": {"bad": "value"}})]
+    splitter = Mock()
+
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+
+    with pytest.raises(ProcessingError, match="Invalid docs input"):
+        document_service.process_doc(Mock(), Path("docs.jsonl"), 256, Mock())
+
+    splitter.split_to_candidates.assert_not_called()
 
 
 def test_process_doc_waits_for_full_doc_before_selecting(
@@ -230,6 +291,7 @@ def test_process_doc_waits_for_full_doc_before_selecting(
         ],
         [{"order": 1, "text": "d2-c1"}],
     ])
+    splitter.split_to_candidates = build_candidates_mock
     select_from_embeddings_mock = Mock(side_effect=[
         [_chunk("d1", 1), _chunk("d1", 2)],
         [_chunk("d2", 1)],
@@ -241,7 +303,6 @@ def test_process_doc_waits_for_full_doc_before_selecting(
     )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
     monkeypatch.setattr(
         document_service, "select_from_embeddings", select_from_embeddings_mock
     )
@@ -272,12 +333,12 @@ def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(document_service, "logger", logger)
     build_candidates_mock = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
+    splitter.split_to_candidates = build_candidates_mock
     embedding = Mock()
     embedding.model = Mock(model_id="Alibaba-NLP/gte-multilingual-base")
     embedding.encode.side_effect = RuntimeError("boom")
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
 
     with pytest.raises(
         ProcessingError,
@@ -313,6 +374,7 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
         [],
         [{"order": 1, "text": "d3-c1"}],
     ])
+    splitter.split_to_candidates = build_candidates_mock
     select_from_embeddings_mock = Mock(side_effect=[
         [_chunk("d1", 1)],
         [_chunk("d3", 1)],
@@ -324,7 +386,6 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
     )
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
     monkeypatch.setattr(
         document_service, "select_from_embeddings", select_from_embeddings_mock
     )
@@ -355,6 +416,7 @@ def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch)
             [{"order": 1, "text": "d3-c1"}],
         ]
     )
+    splitter.split_to_candidates = build_candidates_mock
     select_from_embeddings_mock = Mock(
         side_effect=[[_chunk("d1", 1)], [_chunk("d2", 1)], [_chunk("d3", 1)]]
     )
@@ -365,7 +427,6 @@ def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch)
     ]
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
-    monkeypatch.setattr(document_service, "build_candidates", build_candidates_mock)
     monkeypatch.setattr(
         document_service, "select_from_embeddings", select_from_embeddings_mock
     )

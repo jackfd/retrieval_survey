@@ -213,6 +213,12 @@ def _chunk_char_stats(chunks: List[str]) -> tuple[int, float]:
 
 
 def _normalize_doc_text(value: Any) -> List[str]:
+    """Normalize raw doc_text input into an ordered text-fragment sequence.
+
+    This is a service-boundary adapter only. It accepts the currently supported
+    input shapes (`str` and `list`) and returns the fragment sequence consumed
+    by `ChunkSplitter`. It does not infer or guarantee sentence boundaries.
+    """
     if isinstance(value, str):
         text = value.strip()
         return [text] if text else []
@@ -220,9 +226,9 @@ def _normalize_doc_text(value: Any) -> List[str]:
     if isinstance(value, list):
         normalized: List[str] = []
         for item in value:
-            sentence = str(item).strip()
-            if sentence:
-                normalized.append(sentence)
+            fragment = str(item).strip()
+            if fragment:
+                normalized.append(fragment)
         return normalized
 
     return []

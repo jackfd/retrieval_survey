@@ -100,11 +100,13 @@
 
 `chunk_selector.py` 中的候选构建与选择函数对单篇文档执行如下步骤：
 
-1. 按连续双换行做初切，列表项优先并入前一块。
-2. 块超过 `target_tokens` 时优先按句边界继续切。
-3. 块超过 `hard_max_tokens` 时强制继续切，必要时退化到字符级切分。
-4. 块低于 `min_independent_tokens` 时与相邻块稳定合并。
+1. 将 `doc_text` 统一视为有序文本片段序列；单元素输入按连续双换行做初切，列表项优先并入前一块。
+2. 每个逻辑块独立处理；块未超过 `target_tokens` 时直接保留。
+3. 块超过 `target_tokens` 时优先按句边界继续切，并按顺序 greedily 合并到目标上限内。
+4. 若句切失败或单句超过 `hard_max_tokens`，退化到字符级切分以保证上限约束。
 5. `process_doc` 按固定文档窗口聚合输入，为每个文档记录候选块及其在窗口 chunk 列表中的 offset。
+   - 服务层先把原始 `doc_text` 归一化为文本片段序列：`str -> [str]`，`list[str] -> 过滤空项后的有序片段序列`
+   - 该归一化仅是输入适配，不声明 `list[str]` 元素等于 sentence
 6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按 `inference.batch_size` 完成推理层分批。
 7. 返回的大矩阵按文档 offset 切回单篇文档，对每篇文档的候选向量统一做 L2 归一化。
 8. 对单篇文档的全部候选向量做均值 pooling，再归一化，得到 `doc_centroid`。
@@ -117,8 +119,7 @@
 默认参数：
 
 - `hard_max_tokens = 8092`
-- `target_tokens = 3200`
-- `min_independent_tokens = 500`
+- `target_tokens = min(1200, max(400, int(hard_max_tokens * 0.5)))`
 - `top_n = 3`
 - `mmr_lambda = 0.7`
 

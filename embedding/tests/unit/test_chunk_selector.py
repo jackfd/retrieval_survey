@@ -45,26 +45,6 @@ def _load_chunk_selector_module(monkeypatch: pytest.MonkeyPatch, splitter_module
     return selector_module
 
 
-def test_chunk_selector_build_candidates_calls_splitter(monkeypatch: pytest.MonkeyPatch):
-    splitter_module = _load_chunk_splitter_module(monkeypatch)
-    selector_module = _load_chunk_selector_module(monkeypatch, splitter_module)
-    splitter = Mock()
-    splitter.split_to_candidates = Mock(
-        return_value=[
-            {"order": 1, "text": "第一段"},
-            {"order": 2, "text": "第二段"},
-        ]
-    )
-
-    candidates = selector_module.build_candidates(["ignored"], splitter)
-
-    assert candidates == [
-        {"order": 1, "text": "第一段"},
-        {"order": 2, "text": "第二段"},
-    ]
-    splitter.split_to_candidates.assert_called_once_with(["ignored"])
-
-
 def test_chunk_selector_select_from_embeddings_returns_ranked_top_n_records(
     monkeypatch: pytest.MonkeyPatch,
 ):
