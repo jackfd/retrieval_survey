@@ -31,7 +31,9 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     build_candidates_mock = Mock(
         side_effect=[
         [{"order": 1, "text": "d1-c1"}, {"order": 2, "text": "d1-c2"}],
@@ -63,7 +65,7 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
 
     output = Mock()
 
-    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert output.write_doc_chunks.call_count == 3
     assert embedding.encode.call_count == 1
@@ -109,13 +111,50 @@ def test_process_doc_flushes_multiple_batches(monkeypatch: pytest.MonkeyPatch):
     assert set(first_chunks[0].keys()) == set(DOC_COLUMNS)
 
 
+def test_process_doc_builds_splitter_with_explicit_max_length(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    docs = [(1, {"doc_id": "d1", "doc_text": "text-1"})]
+    splitter = Mock()
+    captured: dict[str, object] = {}
+
+    def fake_chunk_splitter(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return splitter
+
+    embedding = Mock()
+    embedding.encode.return_value = np.array([[1.0, 0.0]], dtype=np.float32)
+
+    monkeypatch.setattr(document_service, "ChunkSplitter", fake_chunk_splitter)
+    monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
+    monkeypatch.setattr(
+        document_service,
+        "build_candidates",
+        Mock(return_value=[{"order": 1, "text": "d1-c1"}]),
+    )
+    monkeypatch.setattr(
+        document_service,
+        "select_from_embeddings",
+        Mock(return_value=[_chunk("d1", 1)]),
+    )
+
+    output = Mock()
+
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
+
+    assert captured == {"args": (), "kwargs": {"max_length": 256}}
+
+
 def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch):
     docs = [
         (1, {"doc_id": "d1", "doc_text": "text-1"}),
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     build_candidates_mock = Mock(side_effect=[
         [{"order": 1, "text": "d1-c1"}, {"order": 2, "text": "d1-c2"}],
         [{"order": 1, "text": "d2-c1"}],
@@ -137,7 +176,7 @@ def test_process_doc_flushes_final_partial_batch(monkeypatch: pytest.MonkeyPatch
 
     output = Mock()
 
-    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert output.write_doc_chunks.call_count == 2
     assert embedding.encode.call_count == 1
@@ -156,7 +195,9 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
     ]
 
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     build_candidates_mock = Mock(side_effect=[[], []])
 
     monkeypatch.setattr(document_service, "read_objects", lambda _p: docs)
@@ -165,7 +206,7 @@ def test_process_doc_raises_when_no_chunks(monkeypatch: pytest.MonkeyPatch):
     output = Mock()
 
     with pytest.raises(ProcessingError, match="No documents found"):
-        document_service.process_doc(Mock(), Path("docs.jsonl"), output)
+        document_service.process_doc(Mock(), Path("docs.jsonl"), 256, output)
 
     output.write_doc_chunks.assert_not_called()
 
@@ -178,7 +219,9 @@ def test_process_doc_waits_for_full_doc_before_selecting(
         (2, {"doc_id": "d2", "doc_text": "text-2"}),
     ]
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     build_candidates_mock = Mock(side_effect=[
         [
             {"order": 1, "text": "d1-c1"},
@@ -205,7 +248,7 @@ def test_process_doc_waits_for_full_doc_before_selecting(
 
     output = Mock()
 
-    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert embedding.encode.call_count == 1
     assert embedding.encode.call_args_list[0].args[0] == [
@@ -224,7 +267,9 @@ def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
     docs = [(1, {"doc_id": "d1", "doc_text": "text-1"})]
     splitter = Mock()
     logger = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     monkeypatch.setattr(document_service, "logger", logger)
     build_candidates_mock = Mock(return_value=[{"order": 1, "text": "d1-c1"}])
     embedding = Mock()
@@ -238,13 +283,12 @@ def test_process_doc_wraps_embedding_errors(monkeypatch: pytest.MonkeyPatch):
         ProcessingError,
         match="start_doc_id=d1 end_doc_id=d1 chunk_count=1",
     ):
-        document_service.process_doc(embedding, Path("docs.jsonl"), Mock())
+        document_service.process_doc(embedding, Path("docs.jsonl"), 256, Mock())
 
     logger.exception.assert_called_once()
     message = logger.exception.call_args.args[0]
-    assert "docs embedding batch failed model_id=%s" in message
+    assert "docs embedding batch failed, start_doc_id=%s" in message
     assert logger.exception.call_args.args[1:] == (
-        "Alibaba-NLP/gte-multilingual-base",
         "d1",
         "d1",
         1,
@@ -261,7 +305,9 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     build_candidates_mock = Mock(side_effect=[
         [{"order": 1, "text": "d1-c1"}],
         [],
@@ -285,7 +331,7 @@ def test_process_doc_flushes_at_most_once_per_doc(monkeypatch: pytest.MonkeyPatc
 
     output = Mock()
 
-    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert embedding.encode.call_count == 1
     assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d3-c1"]
@@ -298,7 +344,9 @@ def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch)
         (3, {"doc_id": "d3", "doc_text": "text-3"}),
     ]
     splitter = Mock()
-    monkeypatch.setattr(document_service, "ChunkSplitter", lambda: splitter)
+    monkeypatch.setattr(
+        document_service, "ChunkSplitter", lambda *args, **kwargs: splitter
+    )
     monkeypatch.setattr(document_service, "DOC_WINDOW_SIZE", 2)
     build_candidates_mock = Mock(
         side_effect=[
@@ -324,7 +372,7 @@ def test_process_doc_splits_work_across_windows(monkeypatch: pytest.MonkeyPatch)
 
     output = Mock()
 
-    document_service.process_doc(embedding, Path("docs.jsonl"), output)
+    document_service.process_doc(embedding, Path("docs.jsonl"), 256, output)
 
     assert embedding.encode.call_count == 2
     assert embedding.encode.call_args_list[0].args[0] == ["d1-c1", "d2-c1"]

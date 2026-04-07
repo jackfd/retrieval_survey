@@ -17,10 +17,10 @@ DOC_WINDOW_SIZE = 3000
 
 
 def process_doc(
-    embedding: EmbeddingStrategy, doc_path: Path, output: OutputWriter
+    embedding: EmbeddingStrategy, doc_path: Path, max_length: int, output: OutputWriter
 ) -> None:
     run_start = perf_counter()
-    splitter = ChunkSplitter()
+    splitter = ChunkSplitter(max_length=max_length)
     total_selected_chunks = 0
     read_iter = iter(read_objects(doc_path))
 
@@ -108,7 +108,7 @@ def _collect_doc_window(
             }
         )
     logger.info(
-        f"  docs collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
+        f"  1-docs collected, doc_count={len(docs_window)}, chunk_count={len(window_chunk_texts)}"
     )
     return docs_window, window_chunk_texts
 
@@ -126,14 +126,12 @@ def _process_doc_window(
     end_doc_id = str(docs_window[-1]["doc_id"])
     chunks_count = len(chunk_candicates)
     max_chunk_chars, avg_chunk_chars = _chunk_char_stats(chunk_candicates)
-    model_id = _resolve_model_id(embedding)
 
     try:
         vectors = embedding.encode(chunk_candicates, is_query=False)
     except Exception as exc:
         logger.exception(
-            "docs embedding batch failed model_id=%s start_doc_id=%s end_doc_id=%s chunk_count=%s max_chunk_chars=%s avg_chunk_chars=%.1f error_type=%s",
-            model_id,
+            "docs embedding batch failed, start_doc_id=%s end_doc_id=%s chunk_count=%s max_chunk_chars=%s avg_chunk_chars=%.1f error_type=%s",
             start_doc_id,
             end_doc_id,
             chunks_count,
@@ -160,8 +158,10 @@ def _process_doc_window(
         )
     elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "   docs embedding, chunks=%s total_sec:%.3f, avg_ms:%.3f ",
+        "  2-docs embedding, dim=%s chunks=%s max_chunk_chars=%s, total_sec:%.3f, avg_ms:%.3f",
+        vectors.shape[1],
         chunks_count,
+        max_chunk_chars,
         elapsed_sec,
         elapsed_sec * 1000 / chunks_count,
     )
@@ -197,7 +197,7 @@ def _process_doc_window(
 
     write_elapsed_sec = perf_counter() - embed_start
     logger.info(
-        "   doc selected, total chunks:%s total_secs:%.3f",
+        "  3-doc selected, total chunks:%s total_secs:%.3f",
         total_selected_chunks,
         write_elapsed_sec,
     )
@@ -210,14 +210,6 @@ def _chunk_char_stats(chunks: List[str]) -> tuple[int, float]:
 
     lengths = [len(chunk) for chunk in chunks]
     return max(lengths), float(sum(lengths)) / float(len(lengths))
-
-
-def _resolve_model_id(embedding: EmbeddingStrategy) -> str:
-    model = getattr(embedding, "model", None)
-    model_id = getattr(model, "model_id", None)
-    if isinstance(model_id, str) and model_id.strip():
-        return model_id
-    return "unknown"
 
 
 def _normalize_doc_text(value: Any) -> List[str]:

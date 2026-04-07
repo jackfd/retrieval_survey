@@ -14,10 +14,10 @@ class ChunkSplitter:
         r"^(?:[-*•]|(?:\(?\d+\)?|[A-Z]|[IVXivx]+)[\.\):])\s+"
     )
 
-    def __init__(self):
-        self.hard_max_tokens: int = 8092
-        self.target_tokens: int = 3200
-        self.min_independent_tokens: int = 500
+    def __init__(self, max_length: int = 8092):
+        self.hard_max_tokens: int = max_length
+        self.target_tokens: int = int(self.hard_max_tokens * 0.7)
+        self.min_independent_tokens: int = min(500, self.target_tokens)
         self.avg_char_per_token = 4
 
     def split_to_candidates(self, text: List[str]) -> List[Dict[str, object]]:
@@ -37,10 +37,20 @@ class ChunkSplitter:
 
         # 合并过小的块
         merged_chunks = self._merge_small_chunks(split_chunks)
+        self._validate_chunk_limits(merged_chunks)
         return [
             {"order": index + 1, "text": chunk}
             for index, chunk in enumerate(merged_chunks)
         ]
+
+    def _validate_chunk_limits(self, chunks: Sequence[str]) -> None:
+        for index, chunk in enumerate(chunks, start=1):
+            token_count = self._count_tokens(chunk)
+            if token_count > self.hard_max_tokens:
+                raise ValueError(
+                    "chunk exceeds max_length order=%s token_count=%s max_length=%s"
+                    % (index, token_count, self.hard_max_tokens)
+                )
 
     def _split_text_flow(self, text: str) -> List[str]:
         paragraphs = [
