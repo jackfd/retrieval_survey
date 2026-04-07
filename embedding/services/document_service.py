@@ -8,7 +8,7 @@ from embedding.domain.exceptions import ProcessingError
 from embedding.infra.embedding_strategies import EmbeddingStrategy
 from embedding.infra.jsonl_reader import read_objects
 from embedding.infra.output_writer import OutputWriter
-from embedding.services.chunk_selector import build_candidates, select_from_embeddings
+from embedding.services.chunk_selector import select_from_embeddings
 from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
@@ -79,17 +79,17 @@ def _collect_doc_window(
             )
 
         try:
-            candidate_chunks = build_candidates(doc_text, splitter)
+            candidate_chunks = splitter.split_to_candidates(doc_text)
         except Exception as exc:
             logger.exception(
-                "docs candidate preparation failed docs_path=%s line_num=%s doc_id=%s error_type=%s",
+                "doc split to chunks failed, path=%s line_num=%s doc_id=%s error_type=%s",
                 doc_path,
                 line_num,
                 doc_id,
                 type(exc).__name__,
             )
             raise ProcessingError(
-                "docs candidate preparation failed docs_path=%s line_num=%s doc_id=%s"
+                "doc split to chunks failed, path=%s line_num=%s doc_id=%s"
                 % (doc_path, line_num, doc_id)
             ) from exc
 

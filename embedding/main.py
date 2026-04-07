@@ -24,8 +24,9 @@ def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedd
     dataset_loader = DatasetLoader()
     ds_context = dataset_loader.load_dataset_context(Path(dataset_root), dataset_name)
     output_writer = OutputWriter(output_dir, config.experiment.embedding_dim)
+    max_length = config.experiment.max_length
     try:
-        process_doc(embedding, ds_context.docs_path, output_writer)
+        process_doc(embedding, ds_context.docs_path, max_length, output_writer)
         process_query(embedding, ds_context.queries_path, output_writer)
     finally:
         output_writer.close()

@@ -12,12 +12,6 @@ DEFAULT_TOP_N = 3
 DEFAULT_MMR_LAMBDA = 0.7
 
 
-def build_candidates(
-    text: List[str], splitter: ChunkSplitter
-) -> List[Dict[str, object]]:
-    return splitter.split_to_candidates(text)
-
-
 def select_from_embeddings(
     doc_id: str,
     candidates: Sequence[Dict[str, object]],
