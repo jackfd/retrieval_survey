@@ -13,8 +13,7 @@ from embedding.services.query_service import process_query
 import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-OUTPUT_ROOT = "output"
-DATA_SETS = ["scifact_v1", "hotpotqa_distractor_v1", "msmarco_v1", "trec_car_v1"]
+OUTPUT_ROOT = "~/output"
 
 
 def run_once(dataset_root: str, dataset_name: str, config: BuilderConfig, embedding):
@@ -61,10 +60,10 @@ def main(dataset_path: str, config_path: str) -> int:
         cache_root = initialize_model_cache()
         logger.info("Using shared model cache root: %s", cache_root)
 
-        all_cfg = config_loader.load_configs(Path(config_path))
+        pipeline_config = config_loader.load_configs(Path(config_path))
         strategy_factory = EmbeddingStrategyFactory()
         strategy_cache = {}
-        for builder_cfg in all_cfg.values():
+        for builder_cfg in pipeline_config.builders.values():
             model_id = builder_cfg.model.model_id
             current_model_id = model_id
             embedding_strategy = strategy_cache.get(model_id)
@@ -74,7 +73,7 @@ def main(dataset_path: str, config_path: str) -> int:
                 )
                 strategy_cache[model_id] = embedding_strategy
             logger.info("start model_id=%s", model_id)
-            for dname in DATA_SETS:
+            for dname in pipeline_config.datasets:
                 current_dataset_name = dname
                 logger.info("   dataset path=%s name=%s", dataset_path, dname)
                 run_once(dataset_path, dname, builder_cfg, embedding_strategy)

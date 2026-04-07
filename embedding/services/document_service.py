@@ -86,8 +86,7 @@ def process_doc(
     while True:
         docs_window, chunk_candidates = _collect_doc_window(read_iter, DOC_WINDOW_SIZE)
         logger.info(
-            "  1-docs collected, path=%s doc_count=%s chunk_count=%s",
-            candidates_path,
+            "  1-docs collected, doc_count=%s chunk_count=%s",
             len(docs_window),
             len(chunk_candidates),
         )

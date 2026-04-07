@@ -49,9 +49,11 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             # across library versions. Stage-one throughput work relies on the caller
             # passing larger batches; device placement stays library-managed here.
             logger.info(
-                "Initializing FlagEmbedding model=%s requested_device=%s use_fp16=%s",
+                "Initializing FlagEmbedding model=%s requested_device=%s batch_size=%s max_seq_length=%s use_fp16=%s",
                 model.model_id,
                 self.inference.device,
+                self.inference.batch_size,
+                self.experiment.max_length,
                 str(self.inference.device).startswith("cuda"),
             )
             encoder = BGEM3FlagModel(

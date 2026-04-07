@@ -8,7 +8,7 @@
 
 `python embedding/main.py --dataset-path <datasets_root> --config-path model_config.yaml`
 
-该入口脚本会遍历所有已配置的模型以及固定的数据集（"hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"），并生成可用于索引和评估的嵌入工件。
+该入口脚本会遍历所有已配置的模型以及 `model_config.yaml` 中 `datasets` 指定的数据集，并生成可用于索引和评估的嵌入工件。
 
 ## 范围
 
@@ -30,7 +30,7 @@
 1. 使用 `--dataset-path` 参数运行 `main.py`。
 2. 从 `model_config.yaml` 加载构建器配置。
 3. 初始化一个共享的本地模型缓存，路径为 `~/.cache/retrieval_survey/models`（除非通过环境变量覆盖）。
-4. 遍历固定的数据集列表："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"。
+4. 遍历 `model_config.yaml` 中 `datasets` 配置的数据集列表。
 5. 对每个数据集和模型的组合执行 `run_once(dataset, model_id)`。
 6. 当任何组合失败时，以非零状态退出。
 
@@ -65,7 +65,6 @@ retrieval-embedding --dataset-path datasets --config-path model_config.yaml
 内部固定源：
 
 - 输出根目录：`output`
-- 数据集候选项："hotpotqa_distractor_v1", "msmarco_v1", "scifact_v1", "trec_car_v1"
 
 模型缓存行为：
 

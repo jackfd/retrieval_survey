@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from embedding.domain.exceptions import DatasetError
-from embedding.domain.models import BuilderConfig, ExperimentConfig, InferenceConfig, ModelConfig
+from embedding.domain.models import BuilderConfig, ExperimentConfig, InferenceConfig, ModelConfig, PipelineConfig
 from embedding import main as main_module
 
 
@@ -31,6 +31,13 @@ def _builder_config() -> BuilderConfig:
     )
 
 
+def _pipeline_config(datasets: list[str] | None = None) -> PipelineConfig:
+    return PipelineConfig(
+        datasets=datasets or ["scifact_v1"],
+        builders={"model-a": _builder_config()},
+    )
+
+
 def test_main_logs_unexpected_exception_with_traceback(monkeypatch, tmp_path):
     dataset_root = tmp_path / "datasets"
     dataset_root.mkdir()
@@ -43,7 +50,7 @@ def test_main_logs_unexpected_exception_with_traceback(monkeypatch, tmp_path):
     monkeypatch.setattr(
         main_module.ConfigLoader,
         "load_configs",
-        lambda _self, _path: {"model-a": _builder_config()},
+        lambda _self, _path: _pipeline_config(),
     )
     monkeypatch.setattr(
         main_module.EmbeddingStrategyFactory,
@@ -67,7 +74,7 @@ def test_main_logs_unexpected_exception_with_traceback(monkeypatch, tmp_path):
     assert error_type == "RuntimeError"
     assert str(error) == "boom"
     assert model_id == "model-a"
-    assert dataset_name == main_module.DATA_SETS[0]
+    assert dataset_name == "scifact_v1"
 
 
 def test_main_logs_domain_exception_with_context(monkeypatch, tmp_path):
@@ -82,7 +89,7 @@ def test_main_logs_domain_exception_with_context(monkeypatch, tmp_path):
     monkeypatch.setattr(
         main_module.ConfigLoader,
         "load_configs",
-        lambda _self, _path: {"model-a": _builder_config()},
+        lambda _self, _path: _pipeline_config(),
     )
     monkeypatch.setattr(
         main_module.EmbeddingStrategyFactory,
@@ -105,7 +112,7 @@ def test_main_logs_domain_exception_with_context(monkeypatch, tmp_path):
     assert "Pipeline failed with domain error" in message
     assert str(error) == "missing dataset"
     assert model_id == "model-a"
-    assert dataset_name == main_module.DATA_SETS[0]
+    assert dataset_name == "scifact_v1"
 
 
 def test_main_rejects_missing_dataset_path(monkeypatch, tmp_path):
@@ -174,3 +181,38 @@ def test_run_once_builds_shared_candidates_once(monkeypatch, tmp_path):
         candidates_path,
         output_writer,
     )
+
+
+def test_main_runs_configured_datasets_in_order(monkeypatch, tmp_path):
+    dataset_root = tmp_path / "datasets"
+    dataset_root.mkdir()
+    config_path = tmp_path / "model_config.yaml"
+    config_path.write_text(
+        "datasets: []\nexperiment: {}\ninference: {}\nmodels: []\n", encoding="utf-8"
+    )
+
+    logger = Mock()
+    run_once = Mock()
+    pipeline_config = _pipeline_config(["msmarco_v1", "scifact_v1"])
+
+    monkeypatch.setattr(main_module, "setup_logger", lambda _path: logger)
+    monkeypatch.setattr(main_module, "initialize_model_cache", lambda: tmp_path / "cache")
+    monkeypatch.setattr(
+        main_module.ConfigLoader,
+        "load_configs",
+        lambda _self, _path: pipeline_config,
+    )
+    monkeypatch.setattr(
+        main_module.EmbeddingStrategyFactory,
+        "build",
+        lambda _self, _exp, _inf, _model: object(),
+    )
+    monkeypatch.setattr(main_module, "run_once", run_once)
+
+    result = main_module.main(str(dataset_root), str(config_path))
+
+    assert result == 0
+    assert [call.args[1] for call in run_once.call_args_list] == [
+        "msmarco_v1",
+        "scifact_v1",
+    ]

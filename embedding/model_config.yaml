@@ -1,3 +1,9 @@
+datasets:
+  - scifact_v1
+  - hotpotqa_distractor_v1
+  - msmarco_v1
+  - trec_car_v1
+
 experiment:
   embedding_dim: 1024
   max_length: 8092

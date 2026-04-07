@@ -68,6 +68,25 @@ class TestConfigLoader:
         with pytest.raises(ConfigError):
             loader._parse_inference_config({})
 
+    def test_parse_datasets_success(self):
+        loader = ConfigLoader()
+
+        result = loader._parse_datasets({"datasets": [" scifact_v1 ", "msmarco_v1"]})
+
+        assert result == ["scifact_v1", "msmarco_v1"]
+
+    def test_parse_datasets_rejects_missing_empty_or_blank_items(self):
+        loader = ConfigLoader()
+
+        with pytest.raises(ConfigError):
+            loader._parse_datasets({})
+
+        with pytest.raises(ConfigError):
+            loader._parse_datasets({"datasets": []})
+
+        with pytest.raises(ConfigError):
+            loader._parse_datasets({"datasets": ["scifact_v1", "  "]})
+
     def test_extract_models_list_success(self):
         loader = ConfigLoader()
         models = loader._extract_models_list(
@@ -125,6 +144,7 @@ class TestConfigLoader:
         config_path = _write_config(
             tmp_path,
             {
+                "datasets": ["scifact_v1", "msmarco_v1"],
                 "experiment": {
                     "embedding_dim": 384,
                     "max_length": 256,
@@ -147,9 +167,11 @@ class TestConfigLoader:
         )
 
         loader = ConfigLoader()
-        configs = loader.load_configs(config_path)
+        pipeline_config = loader.load_configs(config_path)
+        configs = pipeline_config.builders
 
         assert set(configs) == {"model-a", "model-b"}
+        assert pipeline_config.datasets == ["scifact_v1", "msmarco_v1"]
         model_a = configs["model-a"]
         assert model_a.model.model_id == "model-a"
         assert model_a.model.provider == "provider-a"
@@ -162,6 +184,7 @@ class TestConfigLoader:
         config_path = _write_config(
             tmp_path,
             {
+                "datasets": ["scifact_v1"],
                 "experiment": {"embedding_dim": 384},
                 "inference": {"batch_size": 8},
                 "models": [
@@ -180,6 +203,7 @@ class TestConfigLoader:
         config_path = _write_config(
             tmp_path,
             {
+                "datasets": ["scifact_v1"],
                 "experiment": {"embedding_dim": 384},
                 "inference": {"batch_size": 8},
                 "models": ["not-a-mapping"],

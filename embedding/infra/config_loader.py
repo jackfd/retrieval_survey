@@ -9,6 +9,7 @@ from embedding.domain.models import (
     ExperimentConfig,
     InferenceConfig,
     ModelConfig,
+    PipelineConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,28 @@ class ConfigLoader:
             http_max_retries=int(inference_obj.get("http_max_retries", 2)),
         )
 
+    def _parse_datasets(self, cfg: Dict[str, Any]) -> List[str]:
+        datasets_obj = cfg.get("datasets")
+        if not isinstance(datasets_obj, list):
+            logger.error("Config key 'datasets' must be a list")
+            raise ConfigError("Config key 'datasets' must be a list")
+        if not datasets_obj:
+            logger.error("Config key 'datasets' must not be empty")
+            raise ConfigError("Config key 'datasets' must not be empty")
+
+        datasets: List[str] = []
+        for index, item in enumerate(datasets_obj):
+            dataset_name = str(item).strip()
+            if not dataset_name:
+                logger.error(
+                    "Dataset config item must be a non-empty string index=%s", index
+                )
+                raise ConfigError(
+                    "Dataset config item must be a non-empty string index=%s" % index
+                )
+            datasets.append(dataset_name)
+        return datasets
+
     def _extract_models_list(self, cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
         models = cfg.get("models")
         if not isinstance(models, list):
@@ -80,9 +103,10 @@ class ConfigLoader:
             )
         return model
 
-    def load_configs(self, config_path: Path) -> Dict[str, BuilderConfig]:
+    def load_configs(self, config_path: Path) -> PipelineConfig:
         logger.info("Loading configs from %s", config_path)
         cfg = self._load_yaml_mapping(config_path)
+        datasets = self._parse_datasets(cfg)
         experiment = self._parse_experiment_config(cfg)
         inference = self._parse_inference_config(cfg)
         models = self._extract_models_list(cfg)
@@ -116,4 +140,4 @@ class ConfigLoader:
                 model=model,
                 raw_config=cfg,
             )
-        return builder_configs
+        return PipelineConfig(datasets=datasets, builders=builder_configs)

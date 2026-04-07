@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 DOC_COLUMNS = [
     "doc_id",
@@ -44,6 +44,12 @@ class BuilderConfig:
     inference: InferenceConfig
     model: ModelConfig
     raw_config: Dict[str, Any]
+
+
+@dataclass
+class PipelineConfig:
+    datasets: List[str]
+    builders: Dict[str, BuilderConfig]
 
 
 @dataclass
