@@ -79,6 +79,7 @@ def build_doc_candidates(doc_path: Path, output_path: Path, max_length: int) -> 
 def process_doc(
     embedding: EmbeddingStrategy, candidates_path: Path, output: OutputWriter
 ) -> None:
+    logger.info("docs process started docs_path=%s", candidates_path)
     run_start = perf_counter()
     total_selected_chunks = 0
     read_iter = (obj for _line_num, obj in read_objects(candidates_path))

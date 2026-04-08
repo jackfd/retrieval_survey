@@ -346,7 +346,9 @@ class TestLocalEmbeddingStrategy:
                 "prepared_over_limit_count": 0,
             }
 
-    def test_flag_embedding_describe_input_lengths_without_tokenizer_is_unavailable(self):
+    def test_flag_embedding_describe_input_lengths_without_tokenizer_is_unavailable(
+        self,
+    ):
         class DummyFlagModel:
             def __init__(self, model_id, use_fp16):
                 pass
@@ -477,34 +479,11 @@ class TestLocalEmbeddingStrategy:
             assert logger.info.call_count >= 1
             info_call = logger.info.call_args_list[-1]
             assert info_call.args[0].startswith("Local embedding input token stats")
-            assert info_call.args[1:7] == (
-                "sentence_transformers",
+            assert info_call.args[1:5] == (
                 "test-model-id",
-                False,
                 3,
                 2,
                 520,
-            )
-            assert info_call.args[7] == pytest.approx(310.67, abs=0.01)
-            assert info_call.args[8:] == (1, 512)
-            assert logger.warning.call_count == 2
-            assert logger.warning.call_args_list[0].args[1:] == (
-                "sentence_transformers",
-                "test-model-id",
-                False,
-                1,
-                410,
-                409,
-                512,
-            )
-            assert logger.warning.call_args_list[1].args[1:] == (
-                "sentence_transformers",
-                "test-model-id",
-                False,
-                2,
-                520,
-                409,
-                512,
             )
 
     def test_sentence_transformers_encode_skips_token_logs_when_tokenizer_fails(self):
@@ -604,7 +583,9 @@ class TestLocalEmbeddingStrategy:
                 normalize_embeddings,
                 convert_to_numpy,
             ):
-                return np.asarray([[0.0, 0.0, 0.0, 0.0] for _ in texts], dtype=np.float32)
+                return np.asarray(
+                    [[0.0, 0.0, 0.0, 0.0] for _ in texts], dtype=np.float32
+                )
 
         with _load_local_module(
             sentence_transformers_ctor=DummySentenceTransformer

@@ -35,7 +35,7 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
                 )
                 encoder.max_seq_length = self._effective_max_length
             logger.info(
-                "Initializing sentence_transformers model=%s requested_device=%s batch_size=%s max_seq_length=%s trust_remote_code=%s",
+                "Initializing sentence_transformers model=%s device=%s batch_size=%s max_seq_length=%s trust_remote_code=%s",
                 model.model_id,
                 self.inference.device,
                 self.inference.batch_size,
@@ -51,7 +51,7 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             # across library versions. Stage-one throughput work relies on the caller
             # passing larger batches; device placement stays library-managed here.
             logger.info(
-                "Initializing FlagEmbedding model=%s requested_device=%s batch_size=%s max_seq_length=%s use_fp16=%s",
+                "Initializing FlagEmbedding model=%s device=%s batch_size=%s max_seq_length=%s use_fp16=%s",
                 model.model_id,
                 self.inference.device,
                 self.inference.batch_size,
@@ -174,10 +174,8 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             1 for count in token_lengths if count > self._effective_max_length
         )
         logger.info(
-            "Local embedding input token stats provider=%s model_id=%s is_query=%s input_count=%s min_tokens=%s max_tokens=%s avg_tokens=%.2f over_limit_count=%s effective_max_length=%s",
-            self._encoder[0],
+            "Local embedding input token stats model_id=%s input_count=%s min_tokens=%s max_tokens=%s avg_tokens=%.2f over_limit_count=%s effective_max_length=%s",
             self.model.model_id,
-            is_query,
             input_count,
             min_tokens,
             max_tokens,
@@ -192,10 +190,8 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
         for index, token_count in enumerate(token_lengths):
             if token_count >= warning_threshold:
                 logger.warning(
-                    "Local embedding input is unusually long provider=%s model_id=%s is_query=%s sample_index=%s token_count=%s warning_threshold=%s effective_max_length=%s",
-                    self._encoder[0],
+                    "Local embedding input is unusually long model_id=%s sample_index=%s token_count=%s warning_threshold=%s effective_max_length=%s",
                     self.model.model_id,
-                    is_query,
                     index,
                     token_count,
                     warning_threshold,
@@ -223,8 +219,7 @@ class LocalEmbeddingStrategy(BaseEmbeddingStrategy):
             return [len(ids) for ids in input_ids]
         except Exception as exc:
             logger.warning(
-                "Local embedding token stats unavailable provider=%s model_id=%s error_type=%s",
-                self._encoder[0],
+                "Local embedding token stats unavailable model_id=%s error_type=%s",
                 self.model.model_id,
                 type(exc).__name__,
             )
