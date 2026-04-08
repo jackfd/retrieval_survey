@@ -423,6 +423,140 @@ class TestLocalEmbeddingStrategy:
             assert result.shape == (1, 4)
             assert np.isclose(np.linalg.norm(result[0]), 1.0)
 
+    def test_sentence_transformers_encode_logs_token_stats_and_long_inputs(self):
+        class DummyTokenizer:
+            def __call__(
+                self,
+                texts,
+                add_special_tokens=True,
+                truncation=False,
+                padding=False,
+            ):
+                return {
+                    "input_ids": [
+                        [1, 2],
+                        [1] * 410,
+                        [1] * 520,
+                    ]
+                }
+
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device, trust_remote_code=False):
+                self.max_seq_length = 512
+                self.tokenizer = DummyTokenizer()
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
+
+        with _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        ) as local_module:
+            logger = Mock()
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
+            )
+            local_module.logger = logger
+
+            result = strategy.encode(["a", "b", "c"], is_query=False)
+
+            assert result.shape == (3, 4)
+            assert logger.info.call_count >= 1
+            info_call = logger.info.call_args_list[-1]
+            assert info_call.args[0].startswith("Local embedding input token stats")
+            assert info_call.args[1:7] == (
+                "sentence_transformers",
+                "test-model-id",
+                False,
+                3,
+                2,
+                520,
+            )
+            assert info_call.args[7] == pytest.approx(310.67, abs=0.01)
+            assert info_call.args[8:] == (1, 512)
+            assert logger.warning.call_count == 2
+            assert logger.warning.call_args_list[0].args[1:] == (
+                "sentence_transformers",
+                "test-model-id",
+                False,
+                1,
+                410,
+                409,
+                512,
+            )
+            assert logger.warning.call_args_list[1].args[1:] == (
+                "sentence_transformers",
+                "test-model-id",
+                False,
+                2,
+                520,
+                409,
+                512,
+            )
+
+    def test_sentence_transformers_encode_skips_token_logs_when_tokenizer_fails(self):
+        class DummyTokenizer:
+            def __call__(
+                self,
+                texts,
+                add_special_tokens=True,
+                truncation=False,
+                padding=False,
+            ):
+                raise RuntimeError("tokenizer boom")
+
+        class DummySentenceTransformer:
+            def __init__(self, model_id, device, trust_remote_code=False):
+                self.max_seq_length = 512
+                self.tokenizer = DummyTokenizer()
+
+            def encode(
+                self,
+                texts,
+                batch_size,
+                normalize_embeddings,
+                convert_to_numpy,
+            ):
+                return np.asarray(
+                    [[0.1, 0.2, 0.3, 0.4] for _ in texts], dtype=np.float32
+                )
+
+        with _load_local_module(
+            sentence_transformers_ctor=DummySentenceTransformer
+        ) as local_module:
+            logger = Mock()
+            strategy = local_module.LocalEmbeddingStrategy(
+                experiment=_build_experiment_cfg(embedding_dim=4),
+                inference=_build_inference_cfg(device="cpu", batch_size=4),
+                model=Mock(
+                    provider="sentence_transformers",
+                    model_id="test-model-id",
+                    trust_remote_code=False,
+                ),
+            )
+            local_module.logger = logger
+
+            result = strategy.encode(["hello"], is_query=True)
+
+            assert result.shape == (1, 4)
+            assert logger.warning.call_count == 1
+            assert logger.warning.call_args.args[0].startswith(
+                "Local embedding token stats unavailable"
+            )
+
     def test_flag_embedding_provider_initializes_and_encodes(self):
         created = {}
 

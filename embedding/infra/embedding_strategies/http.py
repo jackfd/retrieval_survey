@@ -15,6 +15,14 @@ class HttpEmbeddingStrategy(BaseEmbeddingStrategy):
         super().__init__(experiment=experiment, inference=inference)
         self.embedding_api_url = inference.embedding_api_url
 
+    def describe_input_lengths(self, texts, is_query):
+        return {
+            "token_stats_available": False,
+            "max_prepared_tokens": None,
+            "avg_prepared_tokens": None,
+            "prepared_over_limit_count": None,
+        }
+
     def encode(self, texts, is_query):
         prepared = self._prepare_texts(texts, is_query=is_query)
         vectors = []
