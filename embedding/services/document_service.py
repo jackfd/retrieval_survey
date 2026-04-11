@@ -15,7 +15,7 @@ from embedding.services.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 
-DOC_WINDOW_SIZE = 3000
+DOC_WINDOW_SIZE = 6400
 
 
 def build_doc_candidates(doc_path: Path, output_path: Path, max_length: int) -> None:

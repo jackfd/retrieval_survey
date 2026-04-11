@@ -73,10 +73,11 @@ def main(dataset_path: str, config_path: str) -> int:
                     builder_cfg.experiment, builder_cfg.inference, builder_cfg.model
                 )
                 strategy_cache[model_id] = embedding_strategy
-            logger.info("start model_id=%s", model_id)
             for dname in pipeline_config.datasets:
                 current_dataset_name = dname
-                logger.info("   dataset path=%s name=%s", dataset_path, dname)
+                logger.info(
+                    f" {model_id}, prefix={builder_cfg.experiment.query_prefix}, dataset={dname}"
+                )
                 run_once(dataset_path, dname, builder_cfg, embedding_strategy)
         return 0
     except EmbedPipeError as exc:
