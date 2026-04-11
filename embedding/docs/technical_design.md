@@ -39,7 +39,7 @@
 
 - `infra/config_loader.py`
   - 加载 YAML 配置
-  - 从单个入口点构建每个模型的构建器配置
+  - 从顶层默认值和 `models[]` 覆盖值构建每个模型的构建器配置
 - `infra/dataset_loader.py`
   - 通过精确匹配后不区分大小写的唯一匹配来解析子数据集目录
   - 从 `dataset.json` 加载数据集上下文和文件路径
@@ -56,7 +56,7 @@
 
 1. 解析 `--dataset-path` 和 `--config-path`。
 2. 初始化共享的模型缓存目录。
-3. 从 `model_config.yaml` 加载模型注册表。
+3. 从 `model_config.yaml` 加载模型注册表以及每个模型的生效配置。
 4. 对于每个模型和每个固定数据集候选项：
    - 创建 `output/<dataset_name>/<model_id>/`
    - 使用加载的配置映射中的当前构建器配置
@@ -108,7 +108,7 @@
 5. `process_doc` 按固定文档窗口聚合输入，为每个文档记录候选块及其在窗口 chunk 列表中的 offset。
    - 服务层先把原始 `doc_text` 归一化为文本片段序列：`str -> [str]`，`list[str] -> 过滤空项后的有序片段序列`
    - 该归一化仅是输入适配，不声明 `list[str]` 元素等于 sentence
-6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按 `inference.batch_size` 完成推理层分批。
+6. 窗口内全部 chunk 文本一次性交给 embedding 策略，策略内部再按当前 `model_id` 的生效 `batch_size` 完成推理层分批。
    - 本地 provider 会在初始化后探测模型真实支持的上下文上限，并取 `min(experiment.max_length, detected_model_limit)` 作为运行时生效上限
    - `ChunkSplitter.hard_max_tokens` 与本地 provider 的 `max_seq_length` 都应使用该生效上限，而不是盲信 YAML 中的原始配置值
    - `Alibaba-NLP/gte-multilingual-base` 当前不支持 `transformers 5.x`；本项目默认通过固定 `sentence-transformers==3.4.1` 与 `transformers==4.48.2` 规避该远程实现兼容性问题
@@ -137,7 +137,7 @@
 1. 从 `queries.jsonl` 中按输入顺序收集 query，服务层固定窗口大小为 `5000`。
 2. 每个窗口内完成 `query_id` 和 `query_text` 的非空校验，并保留原始行号用于错误日志。
 3. 窗口内全部 `query_text` 一次性交给 embedding 策略。
-4. embedding 策略内部继续按 `inference.batch_size` 执行推理层分批。
+4. embedding 策略内部继续按当前 `model_id` 的生效 `batch_size` 执行推理层分批。
 5. 返回向量矩阵后，按窗口顺序组装为 `query_id/query_text/query_embedding` 记录并立即写出。
 6. 最后一个不足 `2000` 条的窗口按相同流程处理。
 

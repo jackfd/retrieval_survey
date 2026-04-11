@@ -7,8 +7,8 @@ datasets:
 experiment:
   embedding_dim: 1024
   max_length: 8092
-  query_prefix: "query:"
-  doc_prefix: "passage:"
+  query_prefix: ""
+  doc_prefix: ""
   instruction_template: ""
 
 inference:
@@ -21,13 +21,24 @@ inference:
 models:
   - model_id: ibm-granite/granite-embedding-english-r2
     provider: sentence_transformers
+    batch_size: 64
   - model_id: Alibaba-NLP/gte-multilingual-base
     provider: sentence_transformers
     trust_remote_code: true
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    doc_prefix: ""
+    batch_size: 64
   - model_id: Qwen/Qwen3-Embedding-0.6B
     provider: sentence_transformers
+    query_prefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery: "
+    doc_prefix: ""
+    batch_size: 32
   - model_id: jinaai/jina-embeddings-v5-text-small-retrieval
     provider: sentence_transformers
     trust_remote_code: true
+    query_prefix: "Query: "
+    doc_prefix: "Document: "
+    batch_size: 64
   - model_id: BAAI/bge-m3
     provider: flag_embedding
+    batch_size: 32

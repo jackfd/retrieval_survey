@@ -46,10 +46,11 @@ Current governed dataset candidates are: "hotpotqa_distractor_v1", "msmarco_v1",
 
 ### 2.3 Embedding Strategy Conventions
 
-`model_config.yaml` MUST define global strategy keys under `experiment` and `inference`:
+`model_config.yaml` MUST define default strategy keys under `experiment` and `inference`:
 
 - `experiment`: embedding behavior source
 - `inference.embedding_api_url`: strategy switch source
+- `models[]`: per-model override source for `query_prefix`, `doc_prefix`, `instruction_template`, and `batch_size`
 
 Behavioral rules:
 
@@ -58,7 +59,8 @@ Behavioral rules:
    - request: `{"chunks":[...]}`
    - response: `{"vectors":[...]}`
 3. Strategy resolution and URL source MUST come from YAML only.
-4. `inference.batch_size` MUST be applied by embedding strategy implementations (local/http); service-layer processors MUST NOT split batches by this field.
+4. The effective `batch_size` for a builder (from `models[].batch_size` when present, otherwise `inference.batch_size`) MUST be applied by embedding strategy implementations (local/http); service-layer processors MUST NOT split batches by this field.
+5. The effective text preparation fields for a builder (`query_prefix`, `doc_prefix`, `instruction_template`) MUST come from `models[]` overrides when present; otherwise they MUST fall back to top-level `experiment` defaults.
 
 ## 3. Data Contracts
 

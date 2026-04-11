@@ -55,6 +55,34 @@ class ConfigLoader:
             http_max_retries=int(inference_obj.get("http_max_retries", 2)),
         )
 
+    def _build_model_experiment_config(
+        self, default_experiment: ExperimentConfig, model_obj: Dict[str, Any]
+    ) -> ExperimentConfig:
+        return ExperimentConfig(
+            embedding_dim=default_experiment.embedding_dim,
+            max_length=default_experiment.max_length,
+            query_prefix=str(
+                model_obj.get("query_prefix", default_experiment.query_prefix)
+            ),
+            doc_prefix=str(model_obj.get("doc_prefix", default_experiment.doc_prefix)),
+            instruction_template=str(
+                model_obj.get(
+                    "instruction_template", default_experiment.instruction_template
+                )
+            ),
+        )
+
+    def _build_model_inference_config(
+        self, default_inference: InferenceConfig, model_obj: Dict[str, Any]
+    ) -> InferenceConfig:
+        return InferenceConfig(
+            batch_size=int(model_obj.get("batch_size", default_inference.batch_size)),
+            device=default_inference.device,
+            embedding_api_url=default_inference.embedding_api_url,
+            http_timeout=default_inference.http_timeout,
+            http_max_retries=default_inference.http_max_retries,
+        )
+
     def _parse_datasets(self, cfg: Dict[str, Any]) -> List[str]:
         datasets_obj = cfg.get("datasets")
         if not isinstance(datasets_obj, list):
@@ -107,8 +135,8 @@ class ConfigLoader:
         logger.info("Loading configs from %s", config_path)
         cfg = self._load_yaml_mapping(config_path)
         datasets = self._parse_datasets(cfg)
-        experiment = self._parse_experiment_config(cfg)
-        inference = self._parse_inference_config(cfg)
+        default_experiment = self._parse_experiment_config(cfg)
+        default_inference = self._parse_inference_config(cfg)
         models = self._extract_models_list(cfg)
 
         builder_configs: Dict[str, BuilderConfig] = {}
@@ -124,6 +152,12 @@ class ConfigLoader:
                     % (config_path, index)
                 )
             model = self._build_model_config(model_obj)
+            experiment = self._build_model_experiment_config(
+                default_experiment, model_obj
+            )
+            inference = self._build_model_inference_config(
+                default_inference, model_obj
+            )
             if model.model_id in builder_configs:
                 logger.error(
                     "Duplicate model_id in config config_path=%s model_id=%s",

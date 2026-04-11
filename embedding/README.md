@@ -81,8 +81,51 @@ retrieval-embedding --dataset-path datasets --config-path model_config.yaml
 
 批处理语义：
 
-- `model_config.yaml` 中的 `inference.batch_size` 仅用于 embedding 策略层（本地模型或 HTTP 策略）控制推理分批。
+- `model_config.yaml` 中的 `inference.batch_size` 是所有模型共享的默认值；`models[].batch_size` 可按 `model_id` 覆盖。
+- 最终生效的 `batch_size` 仅用于 embedding 策略层（本地模型或 HTTP 策略）控制推理分批。
 - `document_service` 与 `query_service` 不再接收 `batch_size` 入参，也不在服务层重复做同语义分批。
+
+模型级 prompt 语义：
+
+- 顶层 `experiment.query_prefix`、`experiment.doc_prefix`、`experiment.instruction_template` 是共享默认值。
+- `models[]` 下可按 `model_id` 覆盖 `query_prefix`、`doc_prefix`、`instruction_template`，用于适配不同 embedding 模型的输入格式。
+- 建议以模型卡或官方文档为准填写这些 prompt 字段；仓库中的示例仅演示配置方式。
+
+示例：
+
+```yaml
+experiment:
+  embedding_dim: 1024
+  max_length: 8092
+  query_prefix: ""
+  doc_prefix: ""
+  instruction_template: ""
+
+inference:
+  batch_size: 64
+  device: "cuda"
+  embedding_api_url: ""
+  http_timeout: 30.0
+  http_max_retries: 2
+
+models:
+  - model_id: ibm-granite/granite-embedding-english-r2
+    provider: sentence_transformers
+    batch_size: 64
+
+  - model_id: Alibaba-NLP/gte-multilingual-base
+    provider: sentence_transformers
+    trust_remote_code: true
+    query_prefix: "query: "
+    doc_prefix: "passage: "
+    batch_size: 48
+
+  - model_id: BAAI/bge-m3
+    provider: flag_embedding
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    doc_prefix: ""
+    batch_size: 32
+```
 
 ## 预期的数据集目录结构
 
