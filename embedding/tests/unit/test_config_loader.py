@@ -160,7 +160,14 @@ class TestConfigLoader:
                     "http_max_retries": 3,
                 },
                 "models": [
-                    {"model_id": "model-a", "provider": "provider-a"},
+                    {
+                        "model_id": "model-a",
+                        "provider": "provider-a",
+                        "query_prefix": "Query: ",
+                        "doc_prefix": "Doc: ",
+                        "instruction_template": "Embed: {text}",
+                        "batch_size": 4,
+                    },
                     {"model_id": "model-b", "provider": "provider-b"},
                 ],
             },
@@ -173,12 +180,21 @@ class TestConfigLoader:
         assert set(configs) == {"model-a", "model-b"}
         assert pipeline_config.datasets == ["scifact_v1", "msmarco_v1"]
         model_a = configs["model-a"]
+        model_b = configs["model-b"]
         assert model_a.model.model_id == "model-a"
         assert model_a.model.provider == "provider-a"
         assert model_a.model.trust_remote_code is False
         assert model_a.experiment.embedding_dim == 384
-        assert model_a.experiment.instruction_template == "Encode: {text}"
-        assert model_a.inference.batch_size == 8
+        assert model_a.experiment.query_prefix == "Query: "
+        assert model_a.experiment.doc_prefix == "Doc: "
+        assert model_a.experiment.instruction_template == "Embed: {text}"
+        assert model_a.inference.batch_size == 4
+        assert model_b.experiment.query_prefix == "Q: "
+        assert model_b.experiment.doc_prefix == "D: "
+        assert model_b.experiment.instruction_template == "Encode: {text}"
+        assert model_b.inference.batch_size == 8
+        assert model_a.experiment is not model_b.experiment
+        assert model_a.inference is not model_b.inference
 
     def test_load_configs_rejects_duplicate_model_id(self, tmp_path):
         config_path = _write_config(
