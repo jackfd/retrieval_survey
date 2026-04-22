@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retrieval-dataset"
+version = "0.1.0"
+description = "Dataset build pipeline for retrieval benchmarks."
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "jack", email = "jiezhang.fd@gmail.com" }]
+dependencies = []
+
+[project.optional-dependencies]
+trec-car = ["trec-car-tools>=2.6"]
+dev = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+build-scifact  = "retrieval_dataset.build_scifact:main"
+build-hotpotqa = "retrieval_dataset.build_hotpotqa:main"
+build-trec-car = "retrieval_dataset.build_trec_car:main"
+build-msmarco  = "retrieval_dataset.build_msmarco:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["retrieval_dataset*"]

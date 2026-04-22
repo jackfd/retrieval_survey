@@ -1,48 +1,16 @@
-
 import argparse
 import json
 from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def write_jsonl_record(fout, record: dict) -> None:
-    fout.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
-def log_issue(
-    log_records: List[dict],
-    error_counter: Counter,
-    *,
-    file: Path,
-    line_num: int,
-    issue_type: str,
-    action: str = "skip",
-    record_type: str = "",
-    record_id: str = "",
-    split: str = "",
-    detail: str = "",
-) -> None:
-    error_counter[issue_type] += 1
-    rec = {
-        "file": str(file),
-        "line_num": line_num,
-        "issue_type": issue_type,
-        "action": action,
-    }
-    if record_type:
-        rec["record_type"] = record_type
-    if record_id:
-        rec["record_id"] = record_id
-    if split:
-        rec["split"] = split
-    if detail:
-        rec["detail"] = detail
-    log_records.append(rec)
+from retrieval_dataset._io import (
+    ensure_dir,
+    log_issue,
+    normalize_text,
+    write_build_log,
+    write_jsonl_record,
+)
 
 
 def build_docs(
@@ -57,27 +25,41 @@ def build_docs(
 
     with input_file.open("r", encoding="utf-8") as fin, output_file.open("w", encoding="utf-8") as fout:
         for line_num, raw_line in enumerate(fin, 1):
-            line = raw_line.rstrip("\n")
-            if not line.strip():
+            line = raw_line.strip()
+            if not line:
                 continue
 
-            parts = line.split("\t", 1)
-            if len(parts) != 2:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
                 skipped += 1
                 log_issue(
                     log_records,
                     error_counter,
                     file=input_file,
                     line_num=line_num,
-                    issue_type="invalid_doc_row_format",
+                    issue_type="invalid_doc_json",
                     record_type="doc",
-                    detail=line[:300],
+                    detail=f"{exc.msg} (col={exc.colno})",
                 )
                 continue
 
-            doc_id, doc_text = parts
-            doc_id = doc_id.strip()
-            doc_text = doc_text.strip()
+            if not isinstance(obj, dict):
+                skipped += 1
+                log_issue(
+                    log_records,
+                    error_counter,
+                    file=input_file,
+                    line_num=line_num,
+                    issue_type="invalid_doc_record_format",
+                    record_type="doc",
+                    detail=f"type={type(obj).__name__}",
+                )
+                continue
+
+            doc_id = normalize_text(obj.get("doc_id"))
+            title = normalize_text(obj.get("title"))
+            abstract_value = obj.get("abstract")
 
             if not doc_id:
                 skipped += 1
@@ -91,7 +73,27 @@ def build_docs(
                 )
                 continue
 
-            if not doc_text:
+            if not isinstance(abstract_value, list):
+                skipped += 1
+                log_issue(
+                    log_records,
+                    error_counter,
+                    file=input_file,
+                    line_num=line_num,
+                    issue_type="invalid_abstract_format",
+                    record_type="doc",
+                    record_id=doc_id,
+                    detail=f"type={type(abstract_value).__name__}",
+                )
+                continue
+
+            abstract_sentences = []
+            for sentence in abstract_value:
+                sentence_text = normalize_text(sentence)
+                if sentence_text:
+                    abstract_sentences.append(sentence_text)
+
+            if len(abstract_sentences) == 0:
                 skipped += 1
                 log_issue(
                     log_records,
@@ -118,7 +120,9 @@ def build_docs(
                 continue
 
             doc_ids.add(doc_id)
-            write_jsonl_record(fout, {"doc_id": doc_id, "doc_text": doc_text})
+            write_jsonl_record(
+                fout, {"doc_id": doc_id, "title": title, "doc_text": abstract_sentences}
+            )
             written += 1
 
     return written, doc_ids, skipped
@@ -137,28 +141,42 @@ def build_queries(
 
     with input_file.open("r", encoding="utf-8") as fin, output_file.open("w", encoding="utf-8") as fout:
         for line_num, raw_line in enumerate(fin, 1):
-            line = raw_line.rstrip("\n")
-            if not line.strip():
+            line = raw_line.strip()
+            if not line:
                 continue
 
-            parts = line.split("\t", 1)
-            if len(parts) != 2:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
                 skipped += 1
                 log_issue(
                     log_records,
                     error_counter,
                     file=input_file,
                     line_num=line_num,
-                    issue_type="invalid_query_row_format",
+                    issue_type="invalid_query_json",
                     record_type="query",
                     split=split,
-                    detail=line[:300],
+                    detail=f"{exc.msg} (col={exc.colno})",
                 )
                 continue
 
-            query_id, query_text = parts
-            query_id = query_id.strip()
-            query_text = query_text.strip()
+            if not isinstance(obj, dict):
+                skipped += 1
+                log_issue(
+                    log_records,
+                    error_counter,
+                    file=input_file,
+                    line_num=line_num,
+                    issue_type="invalid_query_record_format",
+                    record_type="query",
+                    split=split,
+                    detail=f"type={type(obj).__name__}",
+                )
+                continue
+
+            query_id = normalize_text(obj.get("id"))
+            query_text = normalize_text(obj.get("claim"))
 
             if not query_id:
                 skipped += 1
@@ -223,30 +241,41 @@ def build_qrels(
 
     with input_file.open("r", encoding="utf-8") as fin, output_file.open("w", encoding="utf-8") as fout:
         for line_num, raw_line in enumerate(fin, 1):
-            line = raw_line.rstrip("\n")
-            if not line.strip():
+            line = raw_line.strip()
+            if not line:
                 continue
 
-            parts = line.split("\t")
-            if len(parts) != 4:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError as exc:
                 skipped += 1
                 log_issue(
                     log_records,
                     error_counter,
                     file=input_file,
                     line_num=line_num,
-                    issue_type="invalid_qrel_row_format",
+                    issue_type="invalid_qrel_json",
                     record_type="qrel",
                     split=split,
-                    detail=line[:300],
+                    detail=f"{exc.msg} (col={exc.colno})",
                 )
                 continue
 
-            query_id, _, doc_id, relevance = parts
-            query_id = query_id.strip()
-            doc_id = doc_id.strip()
-            relevance = relevance.strip()
+            if not isinstance(obj, dict):
+                skipped += 1
+                log_issue(
+                    log_records,
+                    error_counter,
+                    file=input_file,
+                    line_num=line_num,
+                    issue_type="invalid_qrel_record_format",
+                    record_type="qrel",
+                    split=split,
+                    detail=f"type={type(obj).__name__}",
+                )
+                continue
 
+            query_id = normalize_text(obj.get("id"))
             if not query_id:
                 skipped += 1
                 log_issue(
@@ -260,37 +289,6 @@ def build_qrels(
                 )
                 continue
 
-            if not doc_id:
-                skipped += 1
-                log_issue(
-                    log_records,
-                    error_counter,
-                    file=input_file,
-                    line_num=line_num,
-                    issue_type="missing_qrel_doc_id",
-                    record_type="qrel",
-                    record_id=query_id,
-                    split=split,
-                )
-                continue
-
-            try:
-                relevance_value = int(relevance)
-            except ValueError:
-                skipped += 1
-                log_issue(
-                    log_records,
-                    error_counter,
-                    file=input_file,
-                    line_num=line_num,
-                    issue_type="invalid_relevance",
-                    record_type="qrel",
-                    record_id=f"{query_id}::{doc_id}",
-                    split=split,
-                    detail=relevance,
-                )
-                continue
-
             if query_id not in valid_query_ids:
                 skipped += 1
                 log_issue(
@@ -300,67 +298,101 @@ def build_qrels(
                     line_num=line_num,
                     issue_type="missing_query_ref",
                     record_type="qrel",
-                    record_id=f"{query_id}::{doc_id}",
                     split=split,
+                    record_id=query_id,
                 )
                 continue
 
-            if doc_id not in valid_doc_ids:
+            evidence_value = obj.get("evidence")
+            if not isinstance(evidence_value, dict):
                 skipped += 1
                 log_issue(
                     log_records,
                     error_counter,
                     file=input_file,
                     line_num=line_num,
-                    issue_type="missing_doc_ref",
+                    issue_type="invalid_evidence_format",
                     record_type="qrel",
-                    record_id=f"{query_id}::{doc_id}",
                     split=split,
+                    record_id=query_id,
+                    detail=f"type={type(evidence_value).__name__}",
                 )
                 continue
 
-            pair = (query_id, doc_id)
-            if pair in seen_pairs:
-                existing_rel = seen_pairs[pair]
-                if existing_rel == relevance_value:
+            evidence_doc_ids = set()
+            for key in evidence_value.keys():
+                doc_id = normalize_text(key)
+                if not doc_id:
                     skipped += 1
                     log_issue(
                         log_records,
                         error_counter,
                         file=input_file,
                         line_num=line_num,
-                        issue_type="duplicate_qrel_same_relevance",
+                        issue_type="missing_evidence_doc_id",
                         record_type="qrel",
-                        record_id=f"{query_id}::{doc_id}",
                         split=split,
-                        detail=str(relevance_value),
+                        record_id=query_id,
                     )
                     continue
-                else:
+                evidence_doc_ids.add(doc_id)
+
+            for doc_id in evidence_doc_ids:
+                if doc_id not in valid_doc_ids:
                     skipped += 1
                     log_issue(
                         log_records,
                         error_counter,
                         file=input_file,
                         line_num=line_num,
-                        issue_type="duplicate_qrel_conflicting_relevance",
+                        issue_type="missing_doc_ref",
                         record_type="qrel",
-                        record_id=f"{query_id}::{doc_id}",
                         split=split,
-                        detail=f"existing={existing_rel}, new={relevance_value}",
+                        record_id=f"{query_id}::{doc_id}",
                     )
                     continue
 
-            seen_pairs[pair] = relevance_value
-            write_jsonl_record(
-                fout,
-                {
-                    "query_id": query_id,
-                    "doc_id": doc_id,
-                    "relevance": relevance_value,
-                },
-            )
-            written += 1
+                pair = (query_id, doc_id)
+                if pair in seen_pairs:
+                    existing_rel = seen_pairs[pair]
+                    if existing_rel == 1:
+                        skipped += 1
+                        log_issue(
+                            log_records,
+                            error_counter,
+                            file=input_file,
+                            line_num=line_num,
+                            issue_type="duplicate_qrel_same_relevance",
+                            record_type="qrel",
+                            split=split,
+                            record_id=f"{query_id}::{doc_id}",
+                            detail="1",
+                        )
+                    else:
+                        skipped += 1
+                        log_issue(
+                            log_records,
+                            error_counter,
+                            file=input_file,
+                            line_num=line_num,
+                            issue_type="duplicate_qrel_conflicting_relevance",
+                            record_type="qrel",
+                            split=split,
+                            record_id=f"{query_id}::{doc_id}",
+                            detail=f"existing={existing_rel}, new=1",
+                        )
+                    continue
+
+                seen_pairs[pair] = 1
+                write_jsonl_record(
+                    fout,
+                    {
+                        "query_id": query_id,
+                        "doc_id": doc_id,
+                        "relevance": 1,
+                    },
+                )
+                written += 1
 
     positive_query_ids = {qid for qid, _ in seen_pairs.keys()}
     return written, len(positive_query_ids), skipped
@@ -370,7 +402,7 @@ def count_orphan_queries(query_ids: Set[str], qrels_file: Path) -> int:
     referenced_query_ids: Set[str] = set()
 
     with qrels_file.open("r", encoding="utf-8") as fin:
-        for line_num, raw_line in enumerate(fin, 1):
+        for raw_line in fin:
             line = raw_line.strip()
             if not line:
                 continue
@@ -378,19 +410,19 @@ def count_orphan_queries(query_ids: Set[str], qrels_file: Path) -> int:
                 obj = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            query_id = obj.get("query_id")
+            query_id = normalize_text(obj.get("query_id"))
             if query_id:
-                referenced_query_ids.add(str(query_id))
+                referenced_query_ids.add(query_id)
 
     return len(query_ids - referenced_query_ids)
 
 
 def write_dataset_json(output_file: Path, stats: Dict) -> None:
     dataset = {
-        "dataset_name": "msmarco",
+        "dataset_name": "scifact",
         "version": "v1",
         "subset": "",
-        "task": "doc_retrieval",
+        "task": "scientific_doc_retrieval",
         "docs_file": "docs.jsonl",
         "splits": {
             "train": {
@@ -403,9 +435,9 @@ def write_dataset_json(output_file: Path, stats: Dict) -> None:
             },
         },
         "metadata": {
-            "domain": "general",
+            "domain": "scientific",
             "language": "en",
-            "source_dataset": "msmarco",
+            "source_dataset": "scifact",
             "source_subset": "",
             "version": "v1",
         },
@@ -416,44 +448,24 @@ def write_dataset_json(output_file: Path, stats: Dict) -> None:
         json.dump(dataset, fout, ensure_ascii=False, indent=2)
 
 
-def write_build_log(
-    output_file: Path,
-    log_records: List[dict],
-    error_counter: Counter,
-    stats: Dict,
-) -> None:
-    payload = {
-        "stats": stats,
-        "error_summary": dict(error_counter),
-        "issue_logs": log_records,
-    }
-    with output_file.open("w", encoding="utf-8") as fout:
-        json.dump(payload, fout, ensure_ascii=False, indent=2)
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build MSMARCO benchmark layout in weak-validation mode.")
-    parser.add_argument("--input-dir", default=".", help="Directory containing raw MSMARCO TSV files.")
-    parser.add_argument("--output-dir", default="msmarco_v1", help="Output benchmark directory.")
+    parser = argparse.ArgumentParser(description="Build SciFact benchmark layout in weak-validation mode.")
+    parser.add_argument("--input-dir", default=".", help="Directory containing SciFact raw files.")
+    parser.add_argument("--output-dir", default="scifact_v1", help="Output benchmark directory.")
+    parser.add_argument("--corpus-file", default="corpus.jsonl", help="SciFact corpus file name.")
+    parser.add_argument("--train-claims-file", default="claims_train.jsonl", help="SciFact train claims file name.")
+    parser.add_argument("--dev-claims-file", default="claims_dev.jsonl", help="SciFact dev claims file name.")
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
 
-    collection_file = input_dir / "collection.tsv"
-    train_queries_file = input_dir / "queries.train.tsv"
-    dev_queries_file = input_dir / "queries.dev.tsv"
-    train_qrels_file = input_dir / "qrels.train.tsv"
-    dev_qrels_file = input_dir / "qrels.dev.tsv"
+    corpus_file = input_dir / args.corpus_file
+    train_claims_file = input_dir / args.train_claims_file
+    dev_claims_file = input_dir / args.dev_claims_file
 
-    required_files = [
-        collection_file,
-        train_queries_file,
-        dev_queries_file,
-        train_qrels_file,
-        dev_qrels_file,
-    ]
-    missing = [str(p) for p in required_files if not p.exists()]
+    required_files = [corpus_file, train_claims_file, dev_claims_file]
+    missing = [str(path) for path in required_files if not path.exists()]
     if missing:
         raise FileNotFoundError(f"Missing required input files: {missing}")
 
@@ -465,22 +477,21 @@ def main() -> None:
     error_counter: Counter = Counter()
 
     docs_count, doc_ids, skipped_docs = build_docs(
-        collection_file,
+        corpus_file,
         output_dir / "docs.jsonl",
         log_records,
         error_counter,
     )
 
     train_queries_count, train_query_ids, skipped_train_queries = build_queries(
-        train_queries_file,
+        train_claims_file,
         output_dir / "train" / "queries.jsonl",
         "train",
         log_records,
         error_counter,
     )
-
     dev_queries_count, dev_query_ids, skipped_dev_queries = build_queries(
-        dev_queries_file,
+        dev_claims_file,
         output_dir / "dev" / "queries.jsonl",
         "dev",
         log_records,
@@ -488,7 +499,7 @@ def main() -> None:
     )
 
     train_qrels_count, train_positive_queries, skipped_train_qrels = build_qrels(
-        train_qrels_file,
+        train_claims_file,
         output_dir / "train" / "qrels.jsonl",
         "train",
         train_query_ids,
@@ -496,9 +507,8 @@ def main() -> None:
         log_records,
         error_counter,
     )
-
     dev_qrels_count, dev_positive_queries, skipped_dev_qrels = build_qrels(
-        dev_qrels_file,
+        dev_claims_file,
         output_dir / "dev" / "qrels.jsonl",
         "dev",
         dev_query_ids,

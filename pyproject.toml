@@ -1,0 +1,21 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["retrieval_dataset", "embedding"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+
+[[tool.mypy.overrides]]
+module = ["trec_car.*", "FlagEmbedding.*", "sentence_transformers.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["embedding/tests", "dataset/tests"]
+markers = [
+    "integration: tests that exercise real module collaboration and filesystem I/O",
+]

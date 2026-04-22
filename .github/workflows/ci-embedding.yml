@@ -1,0 +1,41 @@
+name: CI / embedding
+
+on:
+  push:
+    paths:
+      - "embedding/**"
+      - ".github/workflows/ci-embedding.yml"
+  pull_request:
+    paths:
+      - "embedding/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.11.3"
+
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install embedding package
+        working-directory: embedding
+        run: |
+          uv venv
+          uv pip install -e ".[st,dev]"
+
+      - name: Run tests
+        working-directory: embedding
+        run: uv run python scripts/run_unit_tests.py --mode unit
+
+      - name: Lint
+        run: uv run --with ruff ruff check embedding/
