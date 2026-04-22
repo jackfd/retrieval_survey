@@ -1,0 +1,26 @@
+datasets:
+  #  - scifact_v1
+  - hotpotqa_distractor_v1
+  - msmarco_v1
+    #- trec_car_v1
+
+experiment:
+  embedding_dim: 1024
+  max_length: 8092
+  query_prefix: ""
+  doc_prefix: ""
+  instruction_template: ""
+
+inference:
+  batch_size: 32
+  device: "cuda" # cuda
+  embedding_api_url: ""
+  http_timeout: 30.0
+  http_max_retries: 2
+
+models:
+  - model_id: Alibaba-NLP/gte-multilingual-base
+    provider: sentence_transformers
+    trust_remote_code: true
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    doc_prefix: ""

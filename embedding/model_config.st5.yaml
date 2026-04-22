@@ -1,0 +1,34 @@
+datasets:
+  #- scifact_v1
+#- trec_car_v1
+#- hotpotqa_distractor_v1
+  - msmarco_v1
+
+experiment:
+  embedding_dim: 1024
+  max_length: 8092
+  query_prefix: ""
+  doc_prefix: ""
+  instruction_template: ""
+
+inference:
+  batch_size: 64
+  device: "cuda" # cuda
+  embedding_api_url: ""
+  http_timeout: 30.0
+  http_max_retries: 2
+
+models:
+  - model_id: jinaai/jina-embeddings-v5-text-small-retrieval
+    provider: sentence_transformers
+    trust_remote_code: true
+    query_prefix: "Query: "
+    doc_prefix: "Document: "
+  - model_id: Qwen/Qwen3-Embedding-0.6B
+    provider: sentence_transformers
+    query_prefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery: "
+    doc_prefix: ""
+    batch_size: 32
+  - model_id: ibm-granite/granite-embedding-english-r2
+    provider: sentence_transformers
+    batch_size: 128
