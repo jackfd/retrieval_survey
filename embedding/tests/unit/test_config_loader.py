@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from embedding.domain.exceptions import ConfigError
-from embedding.infra.config_loader import ConfigLoader
+from embedding.adapters.config_loader import ConfigLoader
 
 
 def _write_config(tmp_path: Path, payload: dict) -> Path:

@@ -7,11 +7,11 @@ from typing import Any, Dict, Iterator, List
 import numpy as np
 
 from embedding.domain.exceptions import ProcessingError
-from embedding.infra.embedding_strategies import EmbeddingStrategy
-from embedding.infra.jsonl_reader import read_objects
-from embedding.infra.output_writer import OutputWriter
-from embedding.services.chunk_selector import select_from_embeddings
-from embedding.services.chunk_splitter import ChunkSplitter
+from embedding.adapters.backends import EmbeddingStrategy
+from embedding.adapters.jsonl_reader import read_objects
+from embedding.adapters.output_writer import OutputWriter
+from embedding.domain.chunk_selector import select_from_embeddings
+from embedding.domain.chunk_splitter import ChunkSplitter
 
 logger = logging.getLogger(__name__)
 

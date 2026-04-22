@@ -4,9 +4,9 @@ from time import perf_counter
 from typing import Any, Dict, Iterator, List, Tuple
 
 from embedding.domain.exceptions import ProcessingError
-from embedding.infra.embedding_strategies import EmbeddingStrategy
-from embedding.infra.jsonl_reader import read_objects
-from embedding.infra.output_writer import OutputWriter
+from embedding.adapters.backends import EmbeddingStrategy
+from embedding.adapters.jsonl_reader import read_objects
+from embedding.adapters.output_writer import OutputWriter
 
 logger = logging.getLogger(__name__)
 QUERY_WINDOW_SIZE = 5000

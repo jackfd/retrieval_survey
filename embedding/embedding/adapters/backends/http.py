@@ -4,8 +4,8 @@ import numpy as np
 import requests
 
 from embedding.domain.models import ExperimentConfig, InferenceConfig
-from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
-from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
+from embedding.adapters.backends.base import BaseEmbeddingStrategy
+from embedding.adapters.backends.shape import ensure_embedding_shape
 
 logger = logging.getLogger(__name__)
 

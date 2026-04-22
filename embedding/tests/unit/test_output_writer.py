@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from embedding.domain.models import DOC_COLUMNS, QUERY_COLUMNS
-from embedding.infra.output_writer import OutputWriter
+from embedding.adapters.output_writer import OutputWriter
 
 
 def _doc_row(doc_id: str, idx: int) -> dict:

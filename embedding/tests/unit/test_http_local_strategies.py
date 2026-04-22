@@ -25,26 +25,28 @@ def _load_module_from_file(module_name: str, file_path: Path):
 def _ensure_base_and_shape_modules():
     base_path = (
         Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
+        / "embedding"
+        / "adapters"
+        / "backends"
         / "base.py"
     )
     shape_path = (
         Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
+        / "embedding"
+        / "adapters"
+        / "backends"
         / "shape.py"
     )
     base_module = _load_module_from_file(
-        "embedding.infra.embedding_strategies.base", base_path
+        "embedding.adapters.backends.base", base_path
     )
     shape_module = _load_module_from_file(
-        "embedding.infra.embedding_strategies.shape", shape_path
+        "embedding.adapters.backends.shape", shape_path
     )
 
-    fake_pkg = types.ModuleType("embedding.infra.embedding_strategies")
+    fake_pkg = types.ModuleType("embedding.adapters.backends")
     fake_pkg.__path__ = [
-        str(Path(__file__).resolve().parents[2] / "infra" / "embedding_strategies")
+        str(Path(__file__).resolve().parents[2] / "embedding" / "adapters" / "backends")
     ]
     fake_pkg.BaseEmbeddingStrategy = base_module.BaseEmbeddingStrategy
     fake_pkg.EmbeddingStrategy = base_module.EmbeddingStrategy
@@ -56,20 +58,21 @@ def _load_http_module():
     fake_pkg, base_module, shape_module = _ensure_base_and_shape_modules()
     http_path = (
         Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
+        / "embedding"
+        / "adapters"
+        / "backends"
         / "http.py"
     )
     with patch.dict(
         sys.modules,
         {
-            "embedding.infra.embedding_strategies": fake_pkg,
-            "embedding.infra.embedding_strategies.base": base_module,
-            "embedding.infra.embedding_strategies.shape": shape_module,
+            "embedding.adapters.backends": fake_pkg,
+            "embedding.adapters.backends.base": base_module,
+            "embedding.adapters.backends.shape": shape_module,
         },
     ):
         return _load_module_from_file(
-            "embedding.infra.embedding_strategies.http", http_path
+            "embedding.adapters.backends.http", http_path
         )
 
 
@@ -78,8 +81,9 @@ def _load_local_module(sentence_transformers_ctor=None, flag_ctor=None):
     fake_pkg, base_module, shape_module = _ensure_base_and_shape_modules()
     local_path = (
         Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
+        / "embedding"
+        / "adapters"
+        / "backends"
         / "local.py"
     )
 
@@ -91,15 +95,15 @@ def _load_local_module(sentence_transformers_ctor=None, flag_ctor=None):
     with patch.dict(
         sys.modules,
         {
-            "embedding.infra.embedding_strategies": fake_pkg,
-            "embedding.infra.embedding_strategies.base": base_module,
-            "embedding.infra.embedding_strategies.shape": shape_module,
+            "embedding.adapters.backends": fake_pkg,
+            "embedding.adapters.backends.base": base_module,
+            "embedding.adapters.backends.shape": shape_module,
             "sentence_transformers": fake_st_module,
             "FlagEmbedding": fake_flag_module,
         },
     ):
         yield _load_module_from_file(
-            "embedding.infra.embedding_strategies.local", local_path
+            "embedding.adapters.backends.local", local_path
         )
 
 

@@ -10,8 +10,9 @@ from unittest.mock import Mock
 def _load_base_module():
     base_path = (
         Path(__file__).resolve().parents[2]
-        / "infra"
-        / "embedding_strategies"
+        / "embedding"
+        / "adapters"
+        / "backends"
         / "base.py"
     )
     spec = importlib.util.spec_from_file_location("_embedding_base_test", base_path)

@@ -2,9 +2,9 @@ import logging
 
 from embedding.domain.exceptions import StrategyBuildError
 from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
-from embedding.infra.embedding_strategies.base import EmbeddingStrategy
-from embedding.infra.embedding_strategies.http import HttpEmbeddingStrategy
-from embedding.infra.embedding_strategies.local import LocalEmbeddingStrategy
+from embedding.adapters.backends.base import EmbeddingStrategy
+from embedding.adapters.backends.http import HttpEmbeddingStrategy
+from embedding.adapters.backends.local import LocalEmbeddingStrategy
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT" 
 authors = [
-  { name = "jack", email = "jack@example.com" }
+  { name = "jack", email = "jiezhang.fd@gmail.com" }
 ]
 dependencies = [
   "blingfire>=0.1.8",
@@ -31,25 +31,16 @@ flag = [
   "transformers==4.44.2",
   "sentence-transformers<4",
 ]
+dev = ["pytest>=8.0", "pytest-cov"]
 
 
 
 [project.scripts]
 retrieval-embedding= "embedding.main:cli"
 
-[tool.setuptools]
-packages = [
-  "embedding",
-  "embedding.domain",
-  "embedding.infra",
-  "embedding.infra.embedding_strategies",
-  "embedding.services",
-]
-
-[tool.setuptools.package-dir]
-embedding = "."
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["embedding*"]
 
 [tool.setuptools.package-data]
-embedding = [
-  "model_config.yaml",
-]
+embedding = ["py.typed"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from embedding.infra import model_cache
+from embedding.adapters import model_cache
 
 
 def test_initialize_model_cache_sets_default_env_vars(monkeypatch, tmp_path):

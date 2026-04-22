@@ -17,7 +17,7 @@ def _load_chunk_splitter_module(monkeypatch: pytest.MonkeyPatch, offsets_fn=None
         monkeypatch.setitem(sys.modules, "blingfire", fake_blingfire)
 
     splitter_path = (
-        Path(__file__).resolve().parents[2] / "services" / "chunk_splitter.py"
+        Path(__file__).resolve().parents[2] / "embedding" / "domain" / "chunk_splitter.py"
     )
     splitter_spec = importlib.util.spec_from_file_location(
         "chunk_splitter", splitter_path

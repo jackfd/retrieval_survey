@@ -2,8 +2,8 @@ import logging
 from typing import Any, List, Tuple
 
 from embedding.domain.models import ExperimentConfig, InferenceConfig, ModelConfig
-from embedding.infra.embedding_strategies.base import BaseEmbeddingStrategy
-from embedding.infra.embedding_strategies.shape import ensure_embedding_shape
+from embedding.adapters.backends.base import BaseEmbeddingStrategy
+from embedding.adapters.backends.shape import ensure_embedding_shape
 
 logger = logging.getLogger(__name__)
 

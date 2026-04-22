@@ -2,12 +2,12 @@ import argparse
 from pathlib import Path
 
 from embedding.domain.exceptions import EmbedPipeError
-from embedding.infra.config_loader import ConfigLoader, BuilderConfig
-from embedding.infra.dataset_loader import DatasetLoader
-from embedding.infra.embedding_strategies import EmbeddingStrategyFactory
-from embedding.infra.logger import setup_logger
-from embedding.infra.model_cache import initialize_model_cache
-from embedding.infra.output_writer import OutputWriter
+from embedding.adapters.config_loader import ConfigLoader, BuilderConfig
+from embedding.adapters.dataset_loader import DatasetLoader
+from embedding.adapters.backends import EmbeddingStrategyFactory
+from embedding.adapters.logger import setup_logger
+from embedding.adapters.model_cache import initialize_model_cache
+from embedding.adapters.output_writer import OutputWriter
 from embedding.services.document_service import build_doc_candidates, process_doc
 from embedding.services.query_service import process_query
 import os

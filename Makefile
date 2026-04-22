@@ -21,14 +21,14 @@ test-dataset:
 	cd $(DATASET_DIR) && uv run pytest tests/ -q
 
 test-embedding:
-	cd $(EMBEDDING_DIR) && uv run python scripts/run_unit_tests.py
+	cd $(EMBEDDING_DIR) && uv run pytest tests/ -q
 
 test: test-dataset test-embedding
 
 # ── Linting & formatting ──────────────────────────────────────────────────────
 
 lint:
-	uv run --with ruff ruff check $(DATASET_DIR)/retrieval_dataset/ $(EMBEDDING_DIR)/
+	uv run --with ruff ruff check $(DATASET_DIR)/retrieval_dataset/ $(EMBEDDING_DIR)/embedding/ $(EMBEDDING_DIR)/tests/
 
 fmt:
-	uv run --with ruff ruff format $(DATASET_DIR)/retrieval_dataset/ $(EMBEDDING_DIR)/
+	uv run --with ruff ruff format $(DATASET_DIR)/retrieval_dataset/ $(EMBEDDING_DIR)/embedding/ $(EMBEDDING_DIR)/tests/

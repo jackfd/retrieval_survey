@@ -21,7 +21,7 @@ def _load_chunk_splitter_module(monkeypatch: pytest.MonkeyPatch, offsets_fn=None
     fake_blingfire.text_to_sentences_and_offsets = offsets_fn or _default_offsets
     monkeypatch.setitem(sys.modules, "blingfire", fake_blingfire)
 
-    splitter_path = Path(__file__).resolve().parents[2] / "services" / "chunk_splitter.py"
+    splitter_path = Path(__file__).resolve().parents[2] / "embedding" / "domain" / "chunk_splitter.py"
     splitter_spec = importlib.util.spec_from_file_location("chunk_splitter", splitter_path)
     splitter_module = importlib.util.module_from_spec(splitter_spec)
     assert splitter_spec.loader is not None
@@ -32,12 +32,12 @@ def _load_chunk_splitter_module(monkeypatch: pytest.MonkeyPatch, offsets_fn=None
 def _load_chunk_selector_module(monkeypatch: pytest.MonkeyPatch, splitter_module):
     monkeypatch.setitem(sys.modules, "chunk_splitter", splitter_module)
     monkeypatch.setitem(
-        sys.modules, "embedding.services.chunk_splitter", splitter_module
+        sys.modules, "embedding.domain.chunk_splitter", splitter_module
     )
 
-    selector_path = Path(__file__).resolve().parents[2] / "services" / "chunk_selector.py"
+    selector_path = Path(__file__).resolve().parents[2] / "embedding" / "domain" / "chunk_selector.py"
     selector_spec = importlib.util.spec_from_file_location(
-        "embedding.services.chunk_selector", selector_path
+        "embedding.domain.chunk_selector", selector_path
     )
     selector_module = importlib.util.module_from_spec(selector_spec)
     assert selector_spec.loader is not None

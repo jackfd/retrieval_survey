@@ -162,3 +162,7 @@ dmypy.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+*.claude
+*.pycache
+*.github
